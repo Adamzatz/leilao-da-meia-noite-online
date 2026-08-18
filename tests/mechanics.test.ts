@@ -222,15 +222,23 @@ test("Maçã Solar mantém Prestígio e cobra sua maldição na renda", () => {
   assert.equal(result.players.find((candidate) => candidate.id === holder.id)?.gold, 13, "recebe 5 de renda menos 2 da maldição");
 });
 
-test("Presente Solar transfere a Maçã e a maldição econômica ao rival", () => {
+test("Presente Solar transfere apenas a Maçã e a maldição, preservando o Prestígio do comprador", () => {
   const apple = structuredClone(RELICS.find((item) => item.id === "golden-apple")!);
   const actor = player("buyer", { inventory: [apple] });
   const rival = player("rival");
   const result = executeRelicAction(game([actor, rival]), actor.id, apple.id, rival.id);
+  const originalBuyer = result.players.find((candidate) => candidate.id === actor.id)!;
+  const cursedTarget = result.players.find((candidate) => candidate.id === rival.id)!;
+  const transferredApple = cursedTarget.inventory.find((item) => item.id === apple.id)!;
 
-  assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.gold, 13);
-  assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.inventory.some((item) => item.id === apple.id), false);
-  assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.inventory.find((item) => item.id === apple.id)?.curse?.incomePenalty, 2);
+  assert.equal(originalBuyer.gold, 13);
+  assert.equal(originalBuyer.inventory.some((item) => item.id === apple.id), false);
+  assert.equal(originalBuyer.prestigeBonus, 3);
+  assert.equal(calculateScore(originalBuyer).total, 6, "mantém 3 Prestígios da Maçã e ganha 3 pelo ouro acumulado");
+  assert.equal(transferredApple.prestige, 0);
+  assert.equal(transferredApple.curse?.incomePenalty, 2);
+  assert.equal(calculateScore(cursedTarget).relics, 0);
+  assert.match(result.log.at(-1) ?? "", /preservou 3 Prestígios/i);
 });
 
 test("Luva Contrabandista rouba moedas no sucesso sem inverter a transferência", () => {
