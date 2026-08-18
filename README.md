@@ -6,6 +6,8 @@ Jogue em produção: [leilaodameianoite.shardweb.app](https://leilaodameianoite.
 
 Talentos, negociações, poderes de relíquias e infusões são aplicados ao estado compartilhado da sala e sincronizados com todos os participantes.
 
+O menu principal inclui a Biblioteca da Meia-Noite, com 28 relíquias comuns, 27 receitas de infusão e 7 Itens Proibidos disponíveis para votação. A trilha de Glória permite ampliar permanentemente o limite de ativações de artefatos por ato.
+
 ## Desenvolvimento
 
 ```bash

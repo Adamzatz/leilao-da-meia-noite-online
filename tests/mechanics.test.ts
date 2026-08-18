@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   FUSION_RECIPES,
+  LEGENDARY_RELICS,
   RELICS,
   TALENTS,
+  artifactLimit,
   completeTrade,
   executeRelicAction,
   executeTalentAction,
@@ -106,4 +108,38 @@ test("descrições revisadas correspondem a efeitos implementados", () => {
   assert.match(TALENTS.find((item) => item.id === "silver-tongue")!.description, /recupere 1 moeda/i);
   assert.equal(FUSION_RECIPES.find((item) => item.id === "recipe-buried-monarch")!.result.curse?.incomePenalty, 1);
   assert.match(FUSION_RECIPES.find((item) => item.id === "recipe-discord-garden")!.result.power.description, /até vender uma relíquia/i);
+});
+
+test("talentos da Glória ampliam o limite real de artefatos", () => {
+  assert.equal(artifactLimit(player("buyer")), 2);
+  assert.equal(artifactLimit(player("buyer", { skills: ["third-gallery-key"] })), 3);
+  assert.equal(artifactLimit(player("buyer", { skills: ["third-gallery-key", "master-gallery-key"] })), 4);
+  assert.equal(artifactLimit(player("buyer", { skills: ["master-gallery-key"], extraArtifactsAct: 1 })), 5);
+});
+
+test("Terceira Chave permite a terceira ativação sincronizada", () => {
+  const relic = structuredClone(RELICS.find((item) => item.id === "widow-ring")!);
+  const actor = player("buyer", { skills: ["third-gallery-key"], artifactsUsedAct: 2, inventory: [relic] });
+  const result = executeRelicAction(game([actor, player("rival")]), actor.id, relic.id);
+
+  assert.equal(result.players[0].artifactsUsedAct, 3);
+  assert.equal(result.players[0].gold, 12);
+  assert.equal(result.players[0].inventory[0].usedAct, true);
+});
+
+test("catálogo proibido possui sete candidatos únicos e utilizáveis", () => {
+  assert.equal(LEGENDARY_RELICS.length, 7);
+  assert.equal(new Set(LEGENDARY_RELICS.map((item) => item.id)).size, LEGENDARY_RELICS.length);
+  assert.ok(LEGENDARY_RELICS.every((item) => item.legendary && item.power.description.length > 0));
+});
+
+test("Livro dos Últimos Nomes rouba Prestígio sem sorte local", () => {
+  const book = structuredClone(LEGENDARY_RELICS.find((item) => item.id === "book-final-names")!);
+  const actor = player("buyer", { inventory: [book] });
+  const rival = player("rival", { prestigeBonus: 4 });
+  const result = executeRelicAction(game([actor, rival]), actor.id, book.id, rival.id);
+
+  assert.equal(result.players[0].prestigeBonus, 2);
+  assert.equal(result.players[1].prestigeBonus, 2);
+  assert.equal(result.players[0].inventory[0].usedGame, true);
 });
