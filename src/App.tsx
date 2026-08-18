@@ -8,14 +8,14 @@ type TargetKind = true | "player" | "rivalRelic" | "ownRelic" | "deckRelic";
 type ActionType = "tax" | "discount" | "stealGold" | "silence" | "gainGold" | "convert" | "ward" | "reflect" | "stealPrestige" | "mission" | "giftCurse" | "exalt" | "grandDiscount" | "shield" | "royalDecree" | "tradeMark" | "siphon" | "coinFlip" | "judgment" | "oracle" | "riskBoost" | "recharge" | "purify" | "tradeBoost" | "fusion";
 
 type Character = { id: CharacterId; name: string; title: string; sigil: string; };
-type Talent = { id: string; name: string; icon: string; branch: Branch; tier: number; cost: number; parent?: string; description: string; activeType?: "blackVault" | "swapLot" | "exhibit" | "bribe" | "purify"; };
+export type Talent = { id: string; name: string; icon: string; branch: Branch; tier: number; cost: number; parent?: string; description: string; activeType?: "blackVault" | "prioritySeal" | "exhibit" | "bribe" | "purify"; };
 type ActivePower = { name: string; description: string; type: ActionType; once: "act" | "game"; target?: TargetKind; value?: number; chance?: number; };
 type Curse = { name: string; description: string; penalty?: number; incomePenalty?: number; };
 type Relic = { id: string; name: string; epithet: string; icon: string; prestige: number; start: number; tags: Tag[]; cursed?: boolean; curse?: Curse; legendary?: boolean; fusionTier?: 2 | 3; lore: string; power: ActivePower; };
 type OwnedRelic = Relic & { curseSuppressed?: boolean; bonusPrestige?: number; usedAct?: boolean; usedGame?: boolean; exhaustedLots?: number; awakenings?: number; };
 type FusionRecipe = { id: string; components: string[]; result: Relic; tier: 2 | 3; cost: number; upgradeFrom?: string; upgradeWith?: string; };
 
-type Player = {
+export type Player = {
   id: string;
   userId: string;
   username: string;
@@ -55,7 +55,7 @@ type LobbyRoom = { id: string; code: string; name: string; hostName: string; max
 type RoomMember = { userId: string; username: string; characterId: CharacterId | null; skills: string[]; wins: number; ready: boolean; seat: number; online: boolean; isHost: boolean; };
 type OnlineRoom = { id: string; code: string; name: string; hostUserId: string; maxPlayers: 3 | 4; status: "waiting" | "playing" | "finished"; version: number; viewerId: string; gameState: GameState | null; members: RoomMember[]; };
 
-type GameState = {
+export type GameState = {
   phase: "intro" | "select" | "talents" | "lobby" | "room" | "playing" | "results";
   players: Player[];
   deck: Relic[];
@@ -81,7 +81,7 @@ const CHARACTERS: Character[] = [
 
 const ROOT_TALENTS = ["patron-purse", "veiled-glimpse", "radiant-seal", "silver-tongue", "salt-seal"];
 
-const TALENTS: Talent[] = [
+export const TALENTS: Talent[] = [
   { id: "patron-purse", name: "Bolsa do Patrono", icon: "●", branch: "Fortuna", tier: 1, cost: 2, description: "Comece cada baile com 3 moedas adicionais." },
   { id: "court-tithe", name: "Dízimo de Veludo", icon: "♢", branch: "Fortuna", tier: 2, cost: 3, parent: "patron-purse", description: "Receba 2 moedas adicionais ao final de cada ato." },
   { id: "golden-touch", name: "Mão Dourada", icon: "✦", branch: "Fortuna", tier: 3, cost: 5, parent: "court-tithe", description: "Poderes de relíquias que geram ouro produzem +1 moeda." },
@@ -90,9 +90,9 @@ const TALENTS: Talent[] = [
 
   { id: "veiled-glimpse", name: "Vislumbre Velado", icon: "◈", branch: "Visão", tier: 1, cost: 2, description: "Veja secretamente qual será a próxima relíquia." },
   { id: "appraiser-eye", name: "Olho do Avaliador", icon: "◇", branch: "Visão", tier: 2, cost: 3, parent: "veiled-glimpse", description: "A simulação revela combos, bônus e maldições separadamente." },
-  { id: "marked-catalogue", name: "Catálogo Marcado", icon: "▤", branch: "Visão", tier: 3, cost: 5, parent: "appraiser-eye", description: "Veja quais rivais demonstram grande interesse no lote atual." },
-  { id: "swap-lot", name: "Mão do Destino", icon: "↭", branch: "Visão", tier: 3, cost: 5, parent: "appraiser-eye", description: "Ativa: troque o lote atual pelo próximo, uma vez por partida.", activeType: "swapLot" },
-  { id: "forbidden-oracle", name: "Oráculo Proibido", icon: "☿", branch: "Visão", tier: 4, cost: 8, parent: "marked-catalogue", description: "Conheça os Itens Proibidos e receba +1 voto na escolha." },
+  { id: "marked-catalogue", name: "Catálogo Marcado", icon: "▤", branch: "Visão", tier: 3, cost: 5, parent: "appraiser-eye", description: "Revele quais rivais possuem ouro para subir 3 moedas acima do lance inicial." },
+  { id: "swap-lot", name: "Selo da Primazia", icon: "⚜", branch: "Visão", tier: 3, cost: 5, parent: "appraiser-eye", description: "Ativa: prepare 3 moedas de desconto para o próximo lote que você vencer, uma vez por partida.", activeType: "prioritySeal" },
+  { id: "forbidden-oracle", name: "Oráculo Proibido", icon: "☿", branch: "Visão", tier: 4, cost: 8, parent: "marked-catalogue", description: "Seu voto na escolha do Item Proibido vale 2 votos." },
 
   { id: "radiant-seal", name: "Selo de Renome", icon: "♛", branch: "Glória", tier: 1, cost: 2, description: "A primeira relíquia conquistada em cada ato vale +1 Prestígio." },
   { id: "crown-curator", name: "Curador da Coroa", icon: "✥", branch: "Glória", tier: 2, cost: 3, parent: "radiant-seal", description: "Toda relíquia criada por infusão recebe +2 Prestígios." },
@@ -100,7 +100,7 @@ const TALENTS: Talent[] = [
   { id: "triumphal-exhibit", name: "Exposição Triunfal", icon: "☉", branch: "Glória", tier: 3, cost: 5, parent: "crown-curator", description: "Ativa: pague 2 moedas para gerar 1 Prestígio, uma vez por ato.", activeType: "exhibit" },
   { id: "eternal-name", name: "Nome Eterno", icon: "♜", branch: "Glória", tier: 4, cost: 8, parent: "immortal-gallery", description: "Terminar com seis relíquias concede +4 Prestígio." },
 
-  { id: "silver-tongue", name: "Língua de Prata", icon: "❦", branch: "Intriga", tier: 1, cost: 2, description: "Suas ofertas aos rivais são avaliadas como 2 moedas maiores." },
+  { id: "silver-tongue", name: "Língua de Prata", icon: "❦", branch: "Intriga", tier: 1, cost: 2, description: "Depois de cada compra feita de um rival, recupere 1 moeda da corte." },
   { id: "smuggler", name: "Contrabandista da Corte", icon: "⚿", branch: "Intriga", tier: 2, cost: 3, parent: "silver-tongue", description: "Você pode concluir duas compras por ato em vez de uma." },
   { id: "loaded-dice", name: "Dados Marcados", icon: "⚄", branch: "Intriga", tier: 3, cost: 5, parent: "smuggler", description: "Missões arriscadas recebem +15% de sucesso." },
   { id: "silent-bribe", name: "Suborno Silencioso", icon: "☗", branch: "Intriga", tier: 3, cost: 5, parent: "smuggler", description: "Ativa: pague 3 moedas para retirar um rival do próximo leilão.", activeType: "bribe" },
@@ -113,7 +113,7 @@ const TALENTS: Talent[] = [
   { id: "damned-collector", name: "Colecionador dos Condenados", icon: "☠", branch: "Maldição", tier: 4, cost: 8, parent: "abyss-embrace", description: "Três maldições ativas concedem +5 Prestígio adicional." },
 ];
 
-const RELICS: Relic[] = [
+export const RELICS: Relic[] = [
   { id: "fallen-crown", name: "Coroa do Rei Caído", epithet: "A última insígnia de uma dinastia apagada", icon: "♛", prestige: 3, start: 2, tags: ["Realeza", "Morte"], cursed: true, curse: { name: "Peso do Regicídio", description: "Vale −2 Prestígio enquanto você não possuir outra relíquia de Guerra.", penalty: 2 }, lore: "Dizem que ela ainda pesa com todas as cabeças que ordenou tombar.", power: { name: "Decreto dos Mortos", description: "Cada rival paga 1 moeda a você.", type: "tax", once: "act" } },
   { id: "usurper-cloak", name: "Manto do Usurpador", epithet: "Veludo tecido com juramentos partidos", icon: "♜", prestige: 2, start: 2, tags: ["Realeza", "Traição"], lore: "Seu forro traz os nomes dos nobres que mudaram de lado.", power: { name: "Nome Falso", description: "Seu próximo lote vencido custa 2 moedas a menos.", type: "discount", once: "act", value: 2 } },
   { id: "lust-sword", name: "Espada da Luxúria", epithet: "Uma lâmina que deseja ser desejada", icon: "†", prestige: 3, start: 3, tags: ["Desejo", "Guerra"], cursed: true, curse: { name: "Desejo Insaciável", description: "Vale −2 Prestígio se você terminar com menos de 3 moedas.", penalty: 2 }, lore: "A lâmina nunca feriu alguém que não a tivesse admirado primeiro.", power: { name: "Duelo da Tentação", description: "65% de chance de roubar 3 moedas; na falha, pague 2.", type: "stealGold", once: "act", target: true, value: 3, chance: .65 } },
@@ -126,7 +126,7 @@ const RELICS: Relic[] = [
   { id: "saint-spear", name: "Lança do Santo Traidor", epithet: "Consagrada por lados opostos", icon: "‡", prestige: 4, start: 4, tags: ["Fé", "Guerra"], cursed: true, curse: { name: "Fé Partida", description: "Enquanto ativa, custa −1 Prestígio.", penalty: 1 }, lore: "A ponta atravessou o mártir e o milagre na mesma noite.", power: { name: "Acusação Sagrada", description: "55% de chance de roubar 2 Prestígio de um rival.", type: "stealPrestige", once: "game", target: true, value: 2, chance: .55 } },
   { id: "crypt-key", name: "Chave da Cripta Real", epithet: "Nenhuma fechadura admite reconhecê-la", icon: "⚿", prestige: 1, start: 1, tags: ["Morte", "Realeza"], lore: "À meia-noite, ela gira sozinha na direção do cemitério.", power: { name: "Abrir a Cripta", description: "Encontre entre 1 e 4 moedas.", type: "gainGold", once: "act", value: 4 } },
   { id: "oath-dagger", name: "Adaga dos Sete Juramentos", epithet: "Um fio para cada promessa quebrada", icon: "⌁", prestige: 3, start: 2, tags: ["Guerra", "Traição"], lore: "A sétima inscrição aguarda um nome.", power: { name: "Cobrança de Sangue", description: "Roube 2 moedas de um rival.", type: "stealGold", once: "act", target: true, value: 2, chance: 1 } },
-  { id: "weeping-idol", name: "Ídolo que Chora Ouro", epithet: "Uma divindade menor com uma grande fortuna", icon: "♢", prestige: 2, start: 3, tags: ["Riqueza", "Fé"], cursed: true, curse: { name: "Memória Apagada", description: "Cada ativação também remove 1 Prestígio.", penalty: 1 }, lore: "Cada moeda derramada apaga uma lembrança.", power: { name: "Lágrimas Douradas", description: "Perca 1 Prestígio e receba 4 moedas.", type: "gainGold", once: "act", value: 4 } },
+  { id: "weeping-idol", name: "Ídolo que Chora Ouro", epithet: "Uma divindade menor com uma grande fortuna", icon: "♢", prestige: 2, start: 3, tags: ["Riqueza", "Fé"], cursed: true, curse: { name: "Memória Apagada", description: "Vale −1 Prestígio enquanto ativa; cada uso também remove 1 Prestígio.", penalty: 1 }, lore: "Cada moeda derramada apaga uma lembrança.", power: { name: "Lágrimas Douradas", description: "Perca 1 Prestígio e receba 4 moedas.", type: "gainGold", once: "act", value: 4 } },
   { id: "black-ledger", name: "Livro-Caixa do Demônio", epithet: "Toda dívida encontra seu devedor", icon: "▥", prestige: 3, start: 3, tags: ["Riqueza", "Oculto"], cursed: true, curse: { name: "Juros Infernais", description: "Sua renda é reduzida em 1 moeda a cada ato.", incomePenalty: 1 }, lore: "As páginas finais trazem as assinaturas dos convidados.", power: { name: "Cobrar os Devedores", description: "Cada rival paga 1 moeda a você.", type: "tax", once: "act" } },
   { id: "hollow-armor", name: "Armadura do Cavaleiro Oco", epithet: "Ainda marcha sem ninguém dentro", icon: "♞", prestige: 4, start: 4, tags: ["Guerra", "Morte"], cursed: true, curse: { name: "Fome de Missão", description: "Vale −1 Prestígio até completar uma missão com sucesso.", penalty: 1 }, lore: "Quando o salão silencia, é possível ouvi-la respirar.", power: { name: "Missão do Cavaleiro", description: "50% de roubar uma relíquia. Na falha, perca a Armadura e pague 3 de imposto.", type: "mission", once: "act", target: true, chance: .5 } },
   { id: "golden-apple", name: "Maçã de Ouro Envenenada", epithet: "O presente que derrubou três casas", icon: "●", prestige: 3, start: 2, tags: ["Riqueza", "Desejo"], cursed: true, curse: { name: "Veneno Dourado", description: "Enquanto estiver no Museu, vale −2 Prestígio.", penalty: 2 }, lore: "Seu perfume é doce. A verdade chega depois da mordida.", power: { name: "Presente Envenenado", description: "Entregue a Maçã e sua maldição a um rival; receba 3 moedas.", type: "giftCurse", once: "game", target: true, value: 3 } },
@@ -135,18 +135,18 @@ const RELICS: Relic[] = [
   { id: "duchess-black-rose", name: "Rosa Negra da Duquesa", epithet: "Suas pétalas escutam promessas comerciais", icon: "✾", prestige: 2, start: 2, tags: ["Desejo", "Traição"], lore: "Floresce apenas quando alguém mente sobre o preço.", power: { name: "Marca da Duquesa", description: "Marque um rival; a próxima negociação dele paga 2 moedas a você.", type: "tradeMark", once: "act", target: true } },
   { id: "queen-mourning-veil", name: "Véu de Luto da Rainha", epithet: "Bordado para um funeral que nunca terminou", icon: "⌇", prestige: 2, start: 2, tags: ["Morte", "Desejo"], cursed: true, curse: { name: "Luto Infinito", description: "Vale −1 Prestígio enquanto você não possuir outra peça de Morte.", penalty: 1 }, lore: "Quem o veste chora por pessoas que jamais conheceu.", power: { name: "Lágrima Usurpada", description: "Roube 1 Prestígio de um rival.", type: "siphon", once: "act", target: true, value: 1 } },
   { id: "two-faced-coin", name: "Moeda de Duas Faces", epithet: "Uma aposta cunhada com duas vitórias", icon: "◑", prestige: 2, start: 1, tags: ["Riqueza", "Traição"], cursed: true, curse: { name: "Fortuna Volúvel", description: "Enquanto estiver no Museu, vale −1 Prestígio.", penalty: 1 }, lore: "Ninguém encontrou o lado destinado à derrota.", power: { name: "Cara ou Coroa", description: "50% de receber 5 moedas; na falha, perca 3.", type: "coinFlip", once: "act" } },
-  { id: "nameless-bell", name: "Sino do Carrasco Sem Nome", epithet: "A badalada pronunciava sentenças", icon: "♧", prestige: 3, start: 3, tags: ["Morte", "Guerra"], lore: "Ele toca sem produzir som; mesmo assim, todos obedecem.", power: { name: "Sentença do Carrasco", description: "Um rival perde 2 moedas ou 1 Prestígio, aquilo que possuir em maior abundância.", type: "judgment", once: "act", target: true } },
+  { id: "nameless-bell", name: "Sino do Carrasco Sem Nome", epithet: "A badalada pronunciava sentenças", icon: "♧", prestige: 3, start: 3, tags: ["Morte", "Guerra"], lore: "Ele toca sem produzir som; mesmo assim, todos obedecem.", power: { name: "Sentença do Carrasco", description: "Se o rival tiver 4 ou mais moedas, roube 2; caso contrário, roube 1 Prestígio.", type: "judgment", once: "act", target: true } },
   { id: "oracle-glass-eye", name: "Olho de Vidro do Oráculo", epithet: "Arrancado depois de prever a noite errada", icon: "◉", prestige: 2, start: 2, tags: ["Oculto", "Fé"], lore: "Dentro da pupila, o próximo martelo já caiu.", power: { name: "Catálogo do Amanhã", description: "Veja os próximos três lotes e escolha qual aparecerá primeiro.", type: "oracle", once: "game", target: "deckRelic" } },
   { id: "hollow-legion-banner", name: "Estandarte da Legião Oca", epithet: "Marcha mesmo quando não há vento", icon: "⚑", prestige: 3, start: 3, tags: ["Guerra", "Morte"], lore: "Mil passos ecoam quando o tecido é erguido.", power: { name: "Marcha sem Homens", description: "Seu próximo roubo arriscado recebe +25% de chance.", type: "riskBoost", once: "act", value: 25 } },
   { id: "moon-blood-vial", name: "Frasco de Sangue Lunar", epithet: "Uma noite inteira preservada em cristal", icon: "◒", prestige: 2, start: 2, tags: ["Oculto", "Desejo"], cursed: true, curse: { name: "Sede Lunar", description: "Sua renda é reduzida em 1 moeda.", incomePenalty: 1 }, lore: "O líquido sobe quando a lua se esconde.", power: { name: "Reacender o Ritual", description: "Recarregue um artefato utilizado neste ato.", type: "recharge", once: "game", target: "ownRelic" } },
   { id: "golden-thief-glove", name: "Luva do Ladrão Áureo", epithet: "Feita sob medida para mãos que não existem", icon: "☞", prestige: 2, start: 2, tags: ["Riqueza", "Traição"], lore: "Os dedos apontam sozinhos para a bolsa mais cheia.", power: { name: "Mão Leve", description: "70% de roubar 2 moedas; na falha, o alvo ganha 1 Prestígio.", type: "stealGold", once: "act", target: true, value: 2, chance: .7 } },
   { id: "broken-chain-rosary", name: "Rosário das Correntes Partidas", epithet: "Cada conta absolve um cárcere", icon: "☩", prestige: 3, start: 2, tags: ["Fé", "Traição"], lore: "A última oração termina com uma fechadura aberta.", power: { name: "Libertação", description: "Purifique permanentemente uma maldição do seu Museu.", type: "purify", once: "game", target: "ownRelic" } },
-  { id: "duke-sealed-letter", name: "Carta Selada do Duque", epithet: "Um contrato que oferece duas verdades", icon: "✉", prestige: 2, start: 1, tags: ["Realeza", "Traição"], lore: "O destinatário muda toda vez que o lacre se rompe.", power: { name: "Cláusula Oculta", description: "Sua próxima oferta vale +4 moedas e sua próxima venda gera +2 Prestígios.", type: "tradeBoost", once: "act" } },
+  { id: "duke-sealed-letter", name: "Carta Selada do Duque", epithet: "Um contrato que oferece duas verdades", icon: "✉", prestige: 2, start: 1, tags: ["Realeza", "Traição"], lore: "O destinatário muda toda vez que o lacre se rompe.", power: { name: "Cláusula Oculta", description: "Prepare dois favores: recupere até 4 moedas na próxima compra e ganhe +2 Prestígios na próxima venda.", type: "tradeBoost", once: "act" } },
 ];
 
-const LEGENDARY_RELICS: Relic[] = [
+export const LEGENDARY_RELICS: Relic[] = [
   { id: "dragon-heart", name: "Coração do Dragão Ancião", epithet: "Ainda pulsa sob o martelo", icon: "◆", prestige: 6, start: 5, tags: ["Guerra", "Riqueza"], legendary: true, lore: "Cada batida faz as taças tremerem.", power: { name: "Dízimo Dracônico", description: "Roube 2 moedas de cada rival.", type: "tax", once: "game", value: 2 } },
-  { id: "nameless-throne", name: "Trono do Deus Sem Nome", epithet: "Um assento vazio desde a criação", icon: "♚", prestige: 5, start: 5, tags: ["Realeza", "Fé"], legendary: true, lore: "Quem se senta nele esquece o próprio nome.", power: { name: "Ascensão", description: "Ganhe 1 Prestígio para cada duas relíquias em seu Museu.", type: "exalt", once: "game" } },
+  { id: "nameless-throne", name: "Trono do Deus Sem Nome", epithet: "Um assento vazio desde a criação", icon: "♚", prestige: 5, start: 5, tags: ["Realeza", "Fé"], legendary: true, lore: "Quem se senta nele esquece o próprio nome.", power: { name: "Ascensão", description: "Ganhe pelo menos 2 Prestígios, ou metade das relíquias do seu Museu se esse valor for maior.", type: "exalt", once: "game" } },
   { id: "first-hourglass", name: "Ampulheta do Primeiro Amanhecer", epithet: "Areia de um dia que nunca terminou", icon: "⌛", prestige: 4, start: 4, tags: ["Oculto", "Morte"], legendary: true, lore: "Virar a ampulheta faz o salão envelhecer um segundo.", power: { name: "Recuar o Martelo", description: "Seu próximo lote vencido custa 4 moedas a menos.", type: "grandDiscount", once: "game", value: 4 } },
 ];
 
@@ -154,19 +154,19 @@ function makeFusion(id: string, name: string, icon: string, prestige: number, ta
   return { id, name, epithet: "Uma infusão impossível nascida dentro do Museu", icon, prestige, start: 0, tags, fusionTier: options?.tier ?? 2, legendary: options?.legendary, cursed: Boolean(options?.curse), curse: options?.curse, lore: "As peças originais já não podem ser separadas.", power: { name: powerName, description, type: "fusion", once, target } };
 }
 
-const FUSION_RECIPES: FusionRecipe[] = [
-  { id: "recipe-buried-monarch", components: ["fallen-crown", "fallen-king-armor"], tier: 2, cost: 2, result: makeFusion("fusion-buried-monarch", "O Monarca Sepultado", "♚", 7, ["Realeza", "Guerra", "Morte"], "Levante dos Súditos", "Cada rival paga 1 moeda e o próximo poder contra seu Museu é anulado.", "act", undefined, { curse: { name: "Dever de Conquista", description: "Ao ativar, você deve disputar o próximo lote ou perde 1 Prestígio." } }) },
+export const FUSION_RECIPES: FusionRecipe[] = [
+  { id: "recipe-buried-monarch", components: ["fallen-crown", "fallen-king-armor"], tier: 2, cost: 2, result: makeFusion("fusion-buried-monarch", "O Monarca Sepultado", "♚", 7, ["Realeza", "Guerra", "Morte"], "Levante dos Súditos", "Cada rival paga 1 moeda e o próximo poder contra seu Museu é anulado.", "act", undefined, { curse: { name: "Corte Morta", description: "Sua renda é reduzida em 1 moeda enquanto esta maldição estiver ativa.", incomePenalty: 1 } }) },
   { id: "recipe-usurper-regalia", components: ["fallen-crown", "usurper-cloak"], tier: 2, cost: 2, result: makeFusion("fusion-usurper-regalia", "Regalia do Usurpador", "♛", 6, ["Realeza", "Traição", "Morte"], "Conspiração Real", "Seu próximo lote custa 3 moedas a menos; receba também 1 Prestígio.", "act") },
   { id: "recipe-crimson-obsession", components: ["lust-sword", "crimson-perfume"], tier: 2, cost: 2, result: makeFusion("fusion-crimson-obsession", "Obsessão Carmesim", "⚔", 6, ["Desejo", "Guerra", "Oculto"], "Duelo Irresistível", "70% de roubar 4 moedas e retirar o alvo do próximo leilão; na falha, pague 3 e ele ganha 1 Prestígio.", "game", "player") },
   { id: "recipe-seventh-bride", components: ["widow-ring", "queen-mourning-veil"], tier: 2, cost: 2, result: makeFusion("fusion-seventh-bride", "Noiva do Sétimo Funeral", "♢", 6, ["Morte", "Desejo", "Traição"], "Beijo da Última Viúva", "Roube 2 Prestígios; roube 3 se o alvo possuir uma relíquia de Morte.", "game", "player") },
   { id: "recipe-profane-communion", components: ["last-goblet", "heretic-grimoire"], tier: 2, cost: 2, result: makeFusion("fusion-profane-communion", "Comunhão Profana", "♨", 6, ["Fé", "Morte", "Oculto"], "Absolvição pelo Vinho", "Pague 3 moedas, ganhe 3 Prestígios e purifique uma maldição.", "game", "ownRelic") },
-  { id: "recipe-nonexistent-face", components: ["faceless-mirror", "ivory-mask"], tier: 2, cost: 2, result: makeFusion("fusion-nonexistent-face", "Rosto que Nunca Existiu", "◈", 5, ["Oculto", "Desejo", "Realeza"], "Reflexo Roubado", "Copie e utilize imediatamente o poder disponível de uma relíquia rival.", "game", "rivalRelic") },
+  { id: "recipe-nonexistent-face", components: ["faceless-mirror", "ivory-mask"], tier: 2, cost: 2, result: makeFusion("fusion-nonexistent-face", "Rosto que Nunca Existiu", "◈", 5, ["Oculto", "Desejo", "Realeza"], "Reflexo Roubado", "Roube 1 Prestígio do dono e silencie a relíquia rival escolhida até o próximo lote.", "game", "rivalRelic") },
   { id: "recipe-sepulchral-paladin", components: ["saint-spear", "hollow-armor"], tier: 2, cost: 2, result: makeFusion("fusion-sepulchral-paladin", "Paladino Sepulcral", "♞", 9, ["Fé", "Guerra", "Morte"], "Cruzada do Túmulo", "70% de roubar a relíquia escolhida; na falha, pague 3 moedas e perca 3 Prestígios.", "game", "rivalRelic") },
   { id: "recipe-crypt-judgment", components: ["crypt-key", "nameless-bell"], tier: 2, cost: 2, result: makeFusion("fusion-crypt-judgment", "Julgamento da Cripta", "⚿", 5, ["Morte", "Realeza", "Guerra"], "Abrir a Cela", "Se o alvo tiver 4 moedas, roube 2; caso contrário, roube 1 Prestígio.", "act", "player") },
   { id: "recipe-seven-finger-hand", components: ["oath-dagger", "golden-thief-glove"], tier: 2, cost: 2, result: makeFusion("fusion-seven-finger-hand", "Mão dos Sete Dedos", "☞", 6, ["Guerra", "Traição", "Riqueza"], "Golpe Impossível", "75% de roubar 3 moedas. Dois sucessos despertam +2 Prestígios permanentes.", "act", "player") },
   { id: "recipe-weeping-treasure", components: ["weeping-idol", "black-ledger"], tier: 2, cost: 2, result: makeFusion("fusion-weeping-treasure", "Tesouro que Chora", "♢", 6, ["Riqueza", "Fé", "Oculto"], "Cobrança das Lágrimas", "Cada rival paga 1 moeda; para cada rival incapaz, receba 1 Prestígio.", "act", undefined, { curse: { name: "Cofre Faminto", description: "Sua renda é reduzida em 2 moedas.", incomePenalty: 2 } }) },
-  { id: "recipe-discord-garden", components: ["golden-apple", "duchess-black-rose"], tier: 2, cost: 2, result: makeFusion("fusion-discord-garden", "Jardim da Discórdia", "✾", 6, ["Riqueza", "Desejo", "Traição"], "Plantar a Rosa", "O alvo perde 3 Prestígios e você recebe 2 moedas.", "game", "player") },
-  { id: "recipe-two-faced-pact", components: ["two-faced-coin", "duke-sealed-letter"], tier: 2, cost: 2, result: makeFusion("fusion-two-faced-pact", "Pacto de Duas Faces", "◑", 5, ["Riqueza", "Traição", "Realeza"], "Contrato Apostado", "Aposte 3 moedas contra um rival: 50% de ganhar 6; na falha, ele recebe as 3. Sua próxima oferta vale +2.", "act", "player") },
+  { id: "recipe-discord-garden", components: ["golden-apple", "duchess-black-rose"], tier: 2, cost: 2, result: makeFusion("fusion-discord-garden", "Jardim da Discórdia", "✾", 6, ["Riqueza", "Desejo", "Traição"], "Plantar a Rosa", "O alvo perde 3 Prestígios até vender uma relíquia; quando vender, recupera os 3 e você recebe 2 moedas.", "game", "player") },
+  { id: "recipe-two-faced-pact", components: ["two-faced-coin", "duke-sealed-letter"], tier: 2, cost: 2, result: makeFusion("fusion-two-faced-pact", "Pacto de Duas Faces", "◑", 5, ["Riqueza", "Traição", "Realeza"], "Contrato Apostado", "Aposte 3 moedas contra um rival: 50% de ganhar 6; na falha, ele recebe as 3. Sua próxima compra recebe até 2 moedas de volta.", "act", "player") },
   { id: "recipe-draconic-banner", components: ["dragon-heart", "hollow-legion-banner"], tier: 2, cost: 2, result: makeFusion("fusion-draconic-banner", "Estandarte Dracônico", "⚑", 10, ["Guerra", "Riqueza", "Morte"], "Marcha do Dragão", "Cada rival paga 2 moedas; moedas não pagas viram Prestígio.", "game", undefined, { legendary: true, curse: { name: "Terra Queimada", description: "Sua próxima renda é reduzida em 3 moedas.", incomePenalty: 3 } }) },
   { id: "recipe-unpronounceable-reign", components: ["nameless-throne", "last-decree-scepter"], tier: 2, cost: 2, result: makeFusion("fusion-unpronounceable-reign", "Reinado Impronunciável", "♚", 9, ["Realeza", "Fé", "Oculto"], "Direito Divino", "Depois que um rival vencer, tome o lote pagando uma moeda acima do preço final.", "game", undefined, { legendary: true }) },
   { id: "recipe-first-dawn-eye", components: ["first-hourglass", "oracle-glass-eye"], tier: 2, cost: 2, result: makeFusion("fusion-first-dawn-eye", "Olho do Primeiro Amanhecer", "⌛", 7, ["Oculto", "Morte", "Fé"], "Alterar o Destino", "Escolha um dos próximos três lotes e ganhe uma ativação extra neste ato.", "game", "deckRelic", { legendary: true }) },
@@ -177,7 +177,7 @@ const FUSION_RECIPES: FusionRecipe[] = [
   { id: "recipe-hollow-saints-procession", components: ["saint-spear", "hollow-armor", "hollow-legion-banner"], tier: 3, cost: 4, upgradeFrom: "fusion-sepulchral-paladin", upgradeWith: "hollow-legion-banner", result: makeFusion("fusion-hollow-saints-procession", "Procissão dos Santos Ocos", "♞", 14, ["Fé", "Guerra", "Morte"], "Cruzada dos Sem-Alma", "85% de roubar a relíquia escolhida e ganhar 2 Prestígios; na falha, perca 4.", "game", "rivalRelic", { tier: 3 }) },
   { id: "recipe-last-heretic-mass", components: ["last-goblet", "heretic-grimoire", "broken-chain-rosary"], tier: 3, cost: 4, upgradeFrom: "fusion-profane-communion", upgradeWith: "broken-chain-rosary", result: makeFusion("fusion-last-heretic-mass", "Missa da Última Herege", "☩", 11, ["Fé", "Morte", "Oculto"], "Missa Invertida", "Purifique todas as suas maldições, ganhe 1 Prestígio por purificação e retire 1 de cada rival amaldiçoado.", "game", undefined, { tier: 3 }) },
   { id: "recipe-infernal-weeping-treasure", components: ["weeping-idol", "black-ledger", "two-faced-coin"], tier: 3, cost: 4, upgradeFrom: "fusion-weeping-treasure", upgradeWith: "two-faced-coin", result: makeFusion("fusion-infernal-weeping-treasure", "Tesouro Infernal Choroso", "▥", 10, ["Riqueza", "Fé", "Oculto"], "Auditoria do Inferno", "Cada rival paga 2 moedas ou concede 1 Prestígio a você.", "act", undefined, { tier: 3, curse: { name: "Auditor Condenado", description: "Sua renda é reduzida em 1 moeda.", incomePenalty: 1 } }) },
-  { id: "recipe-face-beyond-veil", components: ["faceless-mirror", "ivory-mask", "oracle-glass-eye"], tier: 3, cost: 4, upgradeFrom: "fusion-nonexistent-face", upgradeWith: "oracle-glass-eye", result: makeFusion("fusion-face-beyond-veil", "Rosto Além do Véu", "◈", 9, ["Oculto", "Desejo", "Fé"], "Identidade Impossível", "Copie e use um poder rival sem gastar outra ativação; receba também 2 Prestígios.", "game", "rivalRelic", { tier: 3 }) },
+  { id: "recipe-face-beyond-veil", components: ["faceless-mirror", "ivory-mask", "oracle-glass-eye"], tier: 3, cost: 4, upgradeFrom: "fusion-nonexistent-face", upgradeWith: "oracle-glass-eye", result: makeFusion("fusion-face-beyond-veil", "Rosto Além do Véu", "◈", 9, ["Oculto", "Desejo", "Fé"], "Identidade Impossível", "Roube 2 Prestígios do dono e silencie a relíquia rival escolhida pelos próximos três lotes.", "game", "rivalRelic", { tier: 3 }) },
   { id: "recipe-seventh-funeral-queen", components: ["widow-ring", "queen-mourning-veil", "nameless-bell"], tier: 3, cost: 4, upgradeFrom: "fusion-seventh-bride", upgradeWith: "nameless-bell", result: makeFusion("fusion-seventh-funeral-queen", "Rainha do Sétimo Funeral", "♛", 11, ["Morte", "Desejo", "Guerra"], "Ordenar o Oitavo Funeral", "Roube 2 moedas e 2 Prestígios; roube 3 de cada se o alvo possuir Morte.", "game", "player", { tier: 3 }) },
   { id: "recipe-seven-oaths-syndicate", components: ["oath-dagger", "golden-thief-glove", "duke-sealed-letter"], tier: 3, cost: 4, upgradeFrom: "fusion-seven-finger-hand", upgradeWith: "duke-sealed-letter", result: makeFusion("fusion-seven-oaths-syndicate", "Sindicato dos Sete Juramentos", "⚿", 10, ["Guerra", "Traição", "Riqueza"], "Oferta Irrecusável", "Roube a relíquia escolhida pagando ao dono ouro igual ao Prestígio dela; se não puder, roube 2 moedas.", "act", "rivalRelic", { tier: 3 }) },
   { id: "recipe-nameless-sovereign", components: ["fallen-crown", "last-decree-scepter", "nameless-throne"], tier: 3, cost: 4, upgradeFrom: "fusion-unpronounceable-reign", upgradeWith: "fallen-crown", result: makeFusion("fusion-nameless-sovereign", "Soberano Sem Nome", "♚", 14, ["Realeza", "Fé", "Morte"], "Usurpar o Martelo", "Depois que um rival vencer, tome o lote pagando o preço final +2; ele recebe o ouro de volta e 2 de indenização.", "game", undefined, { tier: 3, legendary: true }) },
@@ -385,7 +385,7 @@ function validTargets(players: Player[], actorId: string, relic: OwnedRelic): Pl
   return players.filter((player) => player.id !== actorId && (relic.power.type !== "mission" || player.inventory.length > 0));
 }
 
-function executeRelicAction(game: GameState, actorId: string, relicId: string, targetId?: string): GameState {
+export function executeRelicAction(game: GameState, actorId: string, relicId: string, targetId?: string): GameState {
   const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
   const actor = players.find((player) => player.id === actorId);
   if (!actor) return game;
@@ -512,17 +512,6 @@ function executeRelicAction(game: GameState, actorId: string, relicId: string, t
     actor.tradeCharm += 4; actor.salePrestigeBoost += 2;
     message = `${actor.character.name} preparou uma cláusula para a próxima negociação.`;
   } else if (relic.power.type === "fusion") {
-    const echoPower = () => {
-      if (!targetRelic || !targetRelicOwner) return "A infusão não encontrou um reflexo válido.";
-      const type = targetRelic.power.type;
-      if (["gainGold", "coinFlip", "royalDecree"].includes(type)) actor.gold += Math.max(2, targetRelic.power.value ?? 2);
-      else if (["discount", "grandDiscount"].includes(type)) actor.bidDiscount += targetRelic.power.value ?? 2;
-      else if (["reflect", "exalt", "convert"].includes(type)) actor.prestigeBonus += 2;
-      else if (["ward", "shield", "purify"].includes(type)) actor.shield += 1;
-      else if (["stealGold", "tax"].includes(type)) { const stolen = Math.min(2, targetRelicOwner.gold); targetRelicOwner.gold -= stolen; actor.gold += stolen; }
-      else { targetRelicOwner.prestigeBonus -= 1; actor.prestigeBonus += 1; }
-      return `${actor.character.name} copiou ${targetRelic.power.name} de ${targetRelicOwner.character.name}.`;
-    };
     const usurpLastAward = (extra: number, title: string): GameState | null => {
       if (game.status !== "awarded" || !game.lastAward?.winnerId || game.lastAward.winnerId === actor.id) return null;
       const winner = players.find((player) => player.id === game.lastAward?.winnerId);
@@ -548,8 +537,8 @@ function executeRelicAction(game: GameState, actorId: string, relicId: string, t
       else { const fine = Math.min(3, actor.gold); actor.gold -= fine; target.gold += fine; target.prestigeBonus += 1; message = `O duelo falhou: ${actor.character.name} pagou ${fine} moedas e concedeu 1 Prestígio.`; }
     } else if (relic.id === "fusion-seventh-bride" && target) { const amount = target.inventory.some((item) => item.tags.includes("Morte")) ? 3 : 2; target.prestigeBonus -= amount; actor.prestigeBonus += amount; message = `A Noiva roubou ${amount} Prestígios de ${target.character.name}.`;
     } else if (relic.id === "fusion-profane-communion" && ownTargetRelic) { if (actor.gold < 3) return game; actor.gold -= 3; actor.prestigeBonus += 3; ownTargetRelic.curseSuppressed = true; message = `A Comunhão converteu 3 moedas em 3 Prestígios e purificou ${ownTargetRelic.name}.`;
-    } else if (relic.id === "fusion-nonexistent-face") message = echoPower();
-    else if (relic.id === "fusion-sepulchral-paladin" && targetRelic && targetRelicOwner) {
+    } else if (relic.id === "fusion-nonexistent-face" && targetRelic && targetRelicOwner) { targetRelicOwner.prestigeBonus -= 1; actor.prestigeBonus += 1; targetRelic.exhaustedLots = Math.max(targetRelic.exhaustedLots ?? 0, 1); message = `${actor.character.name} roubou 1 Prestígio de ${targetRelicOwner.character.name} e silenciou ${targetRelic.name} até o próximo lote.`;
+    } else if (relic.id === "fusion-sepulchral-paladin" && targetRelic && targetRelicOwner) {
       actor.riskBonus = 0;
       if (Math.random() <= Math.min(.95, .7 + markedChance)) { targetRelicOwner.inventory = targetRelicOwner.inventory.filter((item) => item.id !== targetRelic.id); actor.inventory.push(targetRelic); message = `O Paladino roubou ${targetRelic.name}.`; }
       else { const fine = Math.min(3, actor.gold); actor.gold -= fine; actor.prestigeBonus -= 3; message = `A Cruzada falhou: ${actor.character.name} perdeu ${fine} moedas e 3 Prestígios.`; }
@@ -569,7 +558,7 @@ function executeRelicAction(game: GameState, actorId: string, relicId: string, t
     } else if (relic.id === "fusion-hollow-saints-procession" && targetRelic && targetRelicOwner) { actor.riskBonus = 0; if (Math.random() <= Math.min(.97, .85 + markedChance)) { targetRelicOwner.inventory = targetRelicOwner.inventory.filter((item) => item.id !== targetRelic.id); actor.inventory.push(targetRelic); actor.prestigeBonus += 2; message = `A Procissão roubou ${targetRelic.name} e ganhou 2 Prestígios.`; } else { actor.prestigeBonus -= 4; message = `A Procissão falhou e perdeu 4 Prestígios.`; }
     } else if (relic.id === "fusion-last-heretic-mass") { let purged = 0; actor.inventory.forEach((item) => { if (item.cursed && !item.curseSuppressed) { item.curseSuppressed = true; purged += 1; } }); actor.prestigeBonus += purged; players.forEach((player) => { if (player.id !== actor.id && activeCurseCount(player) > 0) player.prestigeBonus -= 1; }); message = `A Missa purificou ${purged} maldições e puniu os Museus condenados.`;
     } else if (relic.id === "fusion-infernal-weeping-treasure") { let coins = 0; let prestige = 0; players.forEach((player) => { if (player.id !== actor.id) { if (player.gold >= 2) { player.gold -= 2; coins += 2; } else { player.prestigeBonus -= 1; prestige += 1; } } }); actor.gold += coins; actor.prestigeBonus += prestige; message = `A Auditoria recebeu ${coins} moedas e ${prestige} Prestígios.`;
-    } else if (relic.id === "fusion-face-beyond-veil") { message = echoPower(); actor.prestigeBonus += 2;
+    } else if (relic.id === "fusion-face-beyond-veil" && targetRelic && targetRelicOwner) { targetRelicOwner.prestigeBonus -= 2; actor.prestigeBonus += 2; targetRelic.exhaustedLots = Math.max(targetRelic.exhaustedLots ?? 0, 3); message = `${actor.character.name} roubou 2 Prestígios de ${targetRelicOwner.character.name} e silenciou ${targetRelic.name} por três lotes.`;
     } else if (relic.id === "fusion-seventh-funeral-queen" && target) { const amount = target.inventory.some((item) => item.tags.includes("Morte")) ? 3 : 2; const stolen = Math.min(amount, target.gold); target.gold -= stolen; actor.gold += stolen; target.prestigeBonus -= amount; actor.prestigeBonus += amount; message = `A Rainha roubou ${stolen} moedas e ${amount} Prestígios de ${target.character.name}.`;
     } else if (relic.id === "fusion-seven-oaths-syndicate" && targetRelic && targetRelicOwner) { const price = targetRelic.prestige; if (actor.gold >= price) { actor.gold -= price; targetRelicOwner.gold += price; targetRelicOwner.prestigeBonus += salePrestige(targetRelic, targetRelicOwner); targetRelicOwner.inventory = targetRelicOwner.inventory.filter((item) => item.id !== targetRelic.id); actor.inventory.push(targetRelic); message = `O Sindicato tomou ${targetRelic.name} por ${price} moedas.`; } else { const stolen = Math.min(2, targetRelicOwner.gold); targetRelicOwner.gold -= stolen; actor.gold += stolen; message = `Sem ouro para o contrato, o Sindicato roubou ${stolen} moedas.`; }
     } else if (relic.id === "fusion-nameless-sovereign") { const usurped = usurpLastAward(2, "Usurpação do Martelo"); if (!usurped) return game; return usurped;
@@ -579,12 +568,12 @@ function executeRelicAction(game: GameState, actorId: string, relicId: string, t
   return { ...game, players, deck, log: appendLog(game, message) };
 }
 
-function executeTalentAction(game: GameState, actorId: string, talentId: string, targetId?: string): GameState {
+export function executeTalentAction(game: GameState, actorId: string, talentId: string, targetId?: string): GameState {
   const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
   const actor = players.find((player) => player.id === actorId);
   const talent = TALENTS.find((item) => item.id === talentId);
   if (!actor || !talent?.activeType || !actor.skills.includes(talentId)) return game;
-  const onceGame = talent.activeType === "swapLot";
+  const onceGame = talent.activeType === "prioritySeal";
   if (actor.activeTalentsUsed.includes(talentId) || actor.activeTalentsUsedGame.includes(talentId)) return game;
   let deck = game.deck;
   let message = `${actor.character.name} usou ${talent.name}.`;
@@ -593,11 +582,9 @@ function executeTalentAction(game: GameState, actorId: string, talentId: string,
     if (visiblePrestige(actor) < 1) return game;
     actor.prestigeBonus -= 1; actor.gold += 5;
     message = `${actor.character.name} trocou 1 Prestígio por 5 moedas no Cofre Negro.`;
-  } else if (talent.activeType === "swapLot") {
-    if (game.status !== "announcement" || !game.deck[game.lotIndex + 1]) return game;
-    deck = [...game.deck];
-    [deck[game.lotIndex], deck[game.lotIndex + 1]] = [deck[game.lotIndex + 1], deck[game.lotIndex]];
-    message = `${actor.character.name} trocou o lote atual pelo próximo.`;
+  } else if (talent.activeType === "prioritySeal") {
+    actor.bidDiscount += 3;
+    message = `${actor.character.name} selou um favor de 3 moedas para o próximo lote conquistado.`;
   } else if (talent.activeType === "exhibit") {
     if (actor.gold < 2) return game;
     actor.gold -= 2; actor.prestigeBonus += 1;
@@ -619,20 +606,22 @@ function executeTalentAction(game: GameState, actorId: string, talentId: string,
 }
 
 function askingPrice(relic: OwnedRelic, buyer: Player): number {
-  return Math.max(2, relic.prestige * 3 + (relic.legendary ? 4 : 1) - (hasSkill(buyer, "silver-tongue") ? 1 : 0));
+  return Math.max(2, relic.prestige * 3 + (relic.legendary ? 4 : 1) - Math.min(2, buyer.tradeCharm));
 }
 
 function salePrestige(relic: OwnedRelic, seller: Player): number {
   return Math.max(1, relic.prestige - 1) + (hasSkill(seller, "shadow-merchant") ? 1 : 0) + seller.salePrestigeBoost;
 }
 
-function completeTrade(game: GameState, buyerId: string, sellerId: string, relicId: string, amount: number): GameState {
+export function completeTrade(game: GameState, buyerId: string, sellerId: string, relicId: string, amount: number): GameState {
   const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
   const buyer = players.find((player) => player.id === buyerId);
   const seller = players.find((player) => player.id === sellerId);
   const relic = seller?.inventory.find((item) => item.id === relicId);
   if (!buyer || !seller || !relic || amount < 0 || buyer.gold < amount) return game;
   buyer.gold -= amount; seller.gold += amount;
+  const rebate = Math.min(amount, buyer.tradeCharm + (hasSkill(buyer, "silver-tongue") ? 1 : 0));
+  buyer.gold += rebate;
   const prestige = salePrestige(relic, seller);
   seller.prestigeBonus += prestige;
   seller.salePrestigeBoost = 0;
@@ -653,7 +642,7 @@ function completeTrade(game: GameState, buyerId: string, sellerId: string, relic
     seller.discordPatron = null;
     seller.discordPenalty = 0;
   }
-  return { ...game, players, pendingOffer: null, log: appendLog(game, `${buyer.username} comprou ${relic.name} de ${seller.username} por ${amount} moedas. ${seller.username} ganhou ${prestige} Prestígio pela venda.`) };
+  return { ...game, players, pendingOffer: null, log: appendLog(game, `${buyer.username} comprou ${relic.name} de ${seller.username} por ${amount} moedas${rebate > 0 ? ` e recuperou ${rebate} da corte` : ""}. ${seller.username} ganhou ${prestige} Prestígio pela venda.`) };
 }
 
 function distributeIncome(game: GameState, nextIndex: number): GameState {
@@ -1162,17 +1151,17 @@ function AuctionControls({ game, human, minimumBid, canBid, canControl, turnPlay
 function Dossier({ player, relic, simulation, game, enabled, onUseTalent }: { player: Player; relic?: Relic; simulation: ReturnType<typeof simulateRelic> | null; game: GameState; enabled: boolean; onUseTalent: (talent: Talent) => void; }) {
   const activeTalents = player.skills.map((id) => TALENTS.find((talent) => talent.id === id)).filter((talent): talent is Talent => Boolean(talent?.activeType));
   const incomeTax = player.inventory.reduce((sum, item) => sum + (!item.curseSuppressed ? item.curse?.incomePenalty ?? 0 : 0), 0);
-  const interest = hasSkill(player, "marked-catalogue") && relic ? game.players.filter((candidate) => !candidate.isHuman && candidate.gold >= relic.start + 3).map((candidate) => candidate.username) : [];
+  const interest = hasSkill(player, "marked-catalogue") && relic ? game.players.filter((candidate) => candidate.id !== player.id && candidate.gold >= relic.start + 3).map((candidate) => candidate.username) : [];
   const canUseTalent = (talent: Talent) => {
     if (!enabled || !talent.activeType) return false;
     if (player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id)) return false;
     if (talent.activeType === "blackVault") return visiblePrestige(player) >= 1;
     if (talent.activeType === "exhibit") return player.gold >= 2;
     if (talent.activeType === "bribe" || talent.activeType === "purify") return player.gold >= 3;
-    if (talent.activeType === "swapLot") return game.status === "announcement" && Boolean(game.deck[game.lotIndex + 1]);
+    if (talent.activeType === "prioritySeal") return true;
     return true;
   };
-  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["legendVote","voteResult","actBreak"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{2 + player.extraArtifactsAct}</b></span></section>{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Muito interessados: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
+  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["legendVote","voteResult","actBreak"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{2 + player.extraArtifactsAct}</b></span></section>{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Podem subir 3 moedas: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
 }
 
 function LegendVote({ onVote, voted, votes, total }: { onVote: (id: string) => void; voted: boolean; votes: number; total: number; }) {
@@ -1208,7 +1197,7 @@ function RelicDetailModal({ relic, player, status, enabled, onClose, onUse }: { 
 
 function TalentActionModal({ talent, player, players, onClose, onTarget }: { talent: Talent; player: Player; players: Player[]; onClose: () => void; onTarget: (id: string) => void; }) {
   const cursedRelics = player.inventory.filter((relic) => relic.cursed && !relic.curseSuppressed);
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="target-modal"><button className="modal-close" onClick={onClose}>×</button><span className="modal-relic-icon">{talent.icon}</span><p className="eyebrow">Talento ativo</p><h2>{talent.name}</h2><p>{talent.description}</p><div className="target-list">{talent.activeType === "bribe" ? players.filter((target) => !target.isHuman).map((target) => <button key={target.id} onClick={() => onTarget(target.id)}><span>{target.character.sigil}</span><div><strong>{target.character.name}</strong><small>Retirar do próximo leilão · custo 3 ●</small></div></button>) : cursedRelics.length === 0 ? <div className="no-target">Você não possui uma maldição ativa.</div> : cursedRelics.map((relic, index) => <button key={`${relic.id}-${index}`} onClick={() => onTarget(relic.id)}><span>{relic.icon}</span><div><strong>{relic.name}</strong><small>{relic.curse?.name} · custo 3 ●</small></div></button>)}</div></section></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="target-modal"><button className="modal-close" onClick={onClose}>×</button><span className="modal-relic-icon">{talent.icon}</span><p className="eyebrow">Talento ativo</p><h2>{talent.name}</h2><p>{talent.description}</p><div className="target-list">{talent.activeType === "bribe" ? players.filter((target) => target.id !== player.id).map((target) => <button key={target.id} onClick={() => onTarget(target.id)}><span>{target.character.sigil}</span><div><strong>{target.character.name}</strong><small>Retirar do próximo leilão · custo 3 ●</small></div></button>) : cursedRelics.length === 0 ? <div className="no-target">Você não possui uma maldição ativa.</div> : cursedRelics.map((relic, index) => <button key={`${relic.id}-${index}`} onClick={() => onTarget(relic.id)}><span>{relic.icon}</span><div><strong>{relic.name}</strong><small>{relic.curse?.name} · custo 3 ●</small></div></button>)}</div></section></div>;
 }
 
 function RivalModal({ rival, buyer, enabled, onClose, onNegotiate }: { rival: Player; buyer: Player; enabled: boolean; onClose: () => void; onNegotiate: (id: string) => void; }) {
@@ -1231,5 +1220,5 @@ function CounterOfferModal({ offer, seller, relic, onAccept, onDecline }: { offe
 }
 
 function RulesModal({ onClose }: { onClose: () => void; }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>02</span><div><strong>Compre relíquias</strong><p>Use ouro nos leilões. Relíquias geram Prestígio, poderes ativos e às vezes maldições.</p></div></article><article><span>03</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>04</span><div><strong>Administre o Museu</strong><p>Você pode ativar até dois artefatos por ato. Algumas infusões concedem uma terceira ativação excepcional.</p></div></article><article><span>05</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Relíquias fundidas também podem ser negociadas.</p></div></article><article><span>06</span><div><strong>Vote no proibido</strong><p>O Item Proibido escolhido pode completar uma das três infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Quem terminar com mais Prestígio vence. Uma vitória solo concede 3 Lúmens.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>02</span><div><strong>Compre relíquias</strong><p>Use ouro nos leilões. Relíquias geram Prestígio, poderes ativos e às vezes maldições.</p></div></article><article><span>03</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>04</span><div><strong>Administre o Museu</strong><p>Você pode ativar até dois artefatos por ato. Algumas infusões concedem uma terceira ativação excepcional.</p></div></article><article><span>05</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Relíquias fundidas também podem ser negociadas.</p></div></article><article><span>06</span><div><strong>Vote no proibido</strong><p>O Item Proibido escolhido pode completar uma das três infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Quem terminar com mais Prestígio vence. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
 }
