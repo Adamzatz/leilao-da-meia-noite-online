@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 type Tag = "Realeza" | "Desejo" | "Guerra" | "Morte" | "Oculto" | "Fé" | "Traição" | "Riqueza";
 type CharacterId = "cajango" | "feliciano" | "dialgo" | "dimas";
 type Branch = "Fortuna" | "Visão" | "Glória" | "Intriga" | "Maldição";
-type GameStatus = "announcement" | "bidding" | "awarded" | "actBreak" | "legendVote" | "voteResult";
+type GameStatus = "intrigue" | "announcement" | "bidding" | "awarded" | "actBreak" | "legendVote" | "voteResult" | "intrigueReveal";
 type TargetKind = true | "player" | "rivalRelic" | "ownRelic" | "deckRelic";
 type ActionType = "tax" | "discount" | "stealGold" | "silence" | "gainGold" | "convert" | "ward" | "reflect" | "stealPrestige" | "mission" | "giftCurse" | "exalt" | "grandDiscount" | "shield" | "royalDecree" | "tradeMark" | "siphon" | "coinFlip" | "judgment" | "oracle" | "riskBoost" | "recharge" | "purify" | "tradeBoost" | "fusion";
 
 type Character = { id: CharacterId; name: string; title: string; sigil: string; };
 export type Talent = { id: string; name: string; icon: string; branch: Branch; tier: number; cost: number; parent?: string; description: string; activeType?: "blackVault" | "prioritySeal" | "exhibit" | "bribe" | "purify"; };
+export type Intrigue = { id: string; name: string; icon: string; description: string; reward: number; target: number; metric: "royalRelics" | "sales" | "hostileActions" | "legendaryRelics" | "curses" | "lowGold" | "collection" | "tradePartners"; };
 type ActivePower = { name: string; description: string; type: ActionType; once: "act" | "game"; target?: TargetKind; value?: number; chance?: number; };
 type Curse = { name: string; description: string; penalty?: number; incomePenalty?: number; };
 type Relic = { id: string; name: string; epithet: string; icon: string; prestige: number; start: number; tags: Tag[]; cursed?: boolean; curse?: Curse; legendary?: boolean; fusionTier?: 2 | 3; lore: string; power: ActivePower; };
@@ -43,11 +44,17 @@ export type Player = {
   decreeStake: number;
   discordPatron: string | null;
   discordPenalty: number;
+  intrigueOptions: string[];
+  intrigueId: string | null;
+  intrigueChosen: boolean;
+  relicsSold: number;
+  hostileActions: number;
+  tradePartners: string[];
 };
 
 type Auction = { relic: Relic; currentBid: number; highBidder: string | null; activeIds: string[]; order: string[]; turnId: string | null; bidders: string[]; };
 type Award = { winnerId: string | null; price: number; message: string; };
-type Score = { playerId: string; relics: number; talents: number; combos: number; gold: number; curses: number; total: number; comboNames: string[]; };
+type Score = { playerId: string; relics: number; talents: number; infusions: number; gold: number; curses: number; intrigue: number; intrigueId: string | null; total: number; fusionNames: string[]; };
 type VoteOutcome = { winnerId: string; counts: Record<string, number>; };
 type Profile = { id: string; username: string; characterId: CharacterId | null; lumens: number; unlockedTalents: string[]; wins: number; };
 type TradeOffer = { buyerId: string; sellerId: string; relicId: string; amount: number; message: string; };
@@ -80,6 +87,17 @@ const CHARACTERS: Character[] = [
 ];
 
 const ROOT_TALENTS = ["patron-purse", "veiled-glimpse", "radiant-seal", "silver-tongue", "salt-seal"];
+
+export const INTRIGUES: Intrigue[] = [
+  { id: "blue-blood", name: "Sangue Azul", icon: "♛", description: "Termine a partida com 3 relíquias de Realeza.", reward: 4, target: 3, metric: "royalRelics" },
+  { id: "dead-merchant", name: "Mercador de Cadáveres", icon: "♜", description: "Venda 2 relíquias durante a partida.", reward: 4, target: 2, metric: "sales" },
+  { id: "bloodied-hands", name: "Mãos Ensanguentadas", icon: "†", description: "Realize 3 ataques com poderes direcionados contra rivais.", reward: 5, target: 3, metric: "hostileActions" },
+  { id: "forbidden-devotee", name: "Devoto do Proibido", icon: "◆", description: "Termine com pelo menos 1 Item Proibido no Museu.", reward: 5, target: 1, metric: "legendaryRelics" },
+  { id: "cursed-museum", name: "Museu Amaldiçoado", icon: "☠", description: "Termine com 3 maldições ainda ativas.", reward: 5, target: 3, metric: "curses" },
+  { id: "last-bettor", name: "Último Apostador", icon: "◑", description: "Termine a partida com no máximo 1 moeda.", reward: 4, target: 1, metric: "lowGold" },
+  { id: "obsessive-collector", name: "Colecionador Obsessivo", icon: "▤", description: "Termine com pelo menos 5 relíquias no Museu.", reward: 5, target: 5, metric: "collection" },
+  { id: "court-conspirator", name: "Conspirador da Corte", icon: "❦", description: "Negocie com 2 jogadores diferentes durante a partida.", reward: 4, target: 2, metric: "tradePartners" },
+];
 
 export const TALENTS: Talent[] = [
   { id: "patron-purse", name: "Bolsa do Patrono", icon: "●", branch: "Fortuna", tier: 1, cost: 2, description: "Comece cada baile com 3 moedas adicionais." },
@@ -215,7 +233,7 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-function createDeck(): Relic[] {
+export function createDeck(): Relic[] {
   const regularIds = new Set(RELICS.map((relic) => relic.id));
   const regularTriples = FUSION_RECIPES.filter((recipe) => recipe.tier === 3 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const regularDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
@@ -271,14 +289,35 @@ function visiblePrestige(player: Player): number {
   return Math.max(0, relics + combos + player.prestigeBonus + curseBonus + collectionBonus - totalCursePenalty(player));
 }
 
-function calculateScore(player: Player): Score {
+export function intrigueProgress(player: Player, intrigueId = player.intrigueId): { current: number; target: number; complete: boolean; label: string } {
+  const intrigue = INTRIGUES.find((item) => item.id === intrigueId);
+  if (!intrigue) return { current: 0, target: 1, complete: false, label: "Intriga ainda não escolhida" };
+  let current = 0;
+  let label = "";
+  if (intrigue.metric === "royalRelics") { current = player.inventory.filter((item) => item.tags.includes("Realeza")).length; label = `${current}/${intrigue.target} relíquias de Realeza`; }
+  if (intrigue.metric === "sales") { current = player.relicsSold ?? 0; label = `${current}/${intrigue.target} relíquias vendidas`; }
+  if (intrigue.metric === "hostileActions") { current = player.hostileActions ?? 0; label = `${current}/${intrigue.target} ataques realizados`; }
+  if (intrigue.metric === "legendaryRelics") { current = player.inventory.filter((item) => item.legendary).length; label = `${current}/${intrigue.target} Itens Proibidos`; }
+  if (intrigue.metric === "curses") { current = activeCurseCount(player); label = `${current}/${intrigue.target} maldições ativas`; }
+  if (intrigue.metric === "lowGold") { current = player.gold <= 1 ? 1 : 0; label = `${player.gold} moeda${player.gold === 1 ? "" : "s"} restante${player.gold === 1 ? "" : "s"}`; }
+  if (intrigue.metric === "collection") { current = player.inventory.length; label = `${current}/${intrigue.target} relíquias no Museu`; }
+  if (intrigue.metric === "tradePartners") { current = new Set(player.tradePartners ?? []).size; label = `${current}/${intrigue.target} parceiros de negociação`; }
+  return { current, target: intrigue.target, complete: current >= intrigue.target, label };
+}
+
+export function intrigueBonus(player: Player): number {
+  const intrigue = INTRIGUES.find((item) => item.id === player.intrigueId);
+  return intrigue && intrigueProgress(player, intrigue.id).complete ? intrigue.reward : 0;
+}
+
+export function calculateScore(player: Player): Score {
   const relics = player.inventory.reduce((sum, relic) => sum + relic.prestige, 0);
   const talents = player.prestigeBonus + player.inventory.reduce((sum, relic) => sum + (relic.bonusPrestige ?? 0), 0) + curseTalentBonus(player) + (hasSkill(player, "eternal-name") && player.inventory.length >= 6 ? 4 : 0);
-  const completed = completedCombos(player);
-  const combos = completed.reduce((sum, combo) => sum + combo.points + (hasSkill(player, "crown-curator") ? 2 : 0), 0);
+  const fused = player.inventory.filter((relic) => relic.fusionTier);
   const curses = totalCursePenalty(player);
   const gold = Math.min(3, Math.floor(player.gold / 4));
-  return { playerId: player.id, relics, talents, combos, gold, curses, total: relics + talents + combos + gold - curses, comboNames: completed.map((combo) => combo.name) };
+  const intrigue = intrigueBonus(player);
+  return { playerId: player.id, relics, talents, infusions: fused.length, gold, curses, intrigue, intrigueId: player.intrigueId, total: relics + talents + gold + intrigue - curses, fusionNames: fused.map((relic) => relic.name) };
 }
 
 function simulateRelic(player: Player, relic: Relic) {
@@ -415,6 +454,7 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
   const goldenBonus = hasSkill(actor, "golden-touch") ? 1 : 0;
   const markedChance = (hasSkill(actor, "loaded-dice") ? .15 : 0) + actor.riskBonus;
   const hostileTarget = target ?? targetRelicOwner;
+  if (hostileTarget) actor.hostileActions = (actor.hostileActions ?? 0) + 1;
   if (hostileTarget && hostileTarget.shield > 0) {
     hostileTarget.shield -= 1;
     return { ...game, players, log: appendLog(game, `${hostileTarget.character.name} anulou ${relic.power.name} com uma proteção do Museu.`) };
@@ -602,7 +642,7 @@ export function executeTalentAction(game: GameState, actorId: string, talentId: 
   } else if (talent.activeType === "bribe") {
     const target = players.find((player) => player.id === targetId && player.id !== actor.id);
     if (!target || actor.gold < 3) return game;
-    actor.gold -= 3; target.blockedAuctions += 1;
+    actor.gold -= 3; target.blockedAuctions += 1; actor.hostileActions = (actor.hostileActions ?? 0) + 1;
     message = `${actor.character.name} subornou a corte contra ${target.character.name}.`;
   } else if (talent.activeType === "purify") {
     const relic = actor.inventory.find((item) => item.id === targetId && item.cursed && !item.curseSuppressed);
@@ -624,7 +664,7 @@ function salePrestige(relic: OwnedRelic, seller: Player): number {
 }
 
 export function completeTrade(game: GameState, buyerId: string, sellerId: string, relicId: string, amount: number): GameState {
-  const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
+  const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })), tradePartners: [...(player.tradePartners ?? [])] }));
   const buyer = players.find((player) => player.id === buyerId);
   const seller = players.find((player) => player.id === sellerId);
   const relic = seller?.inventory.find((item) => item.id === relicId);
@@ -639,6 +679,9 @@ export function completeTrade(game: GameState, buyerId: string, sellerId: string
   seller.inventory = seller.inventory.filter((item) => item.id !== relicId);
   buyer.inventory.push(relic);
   buyer.tradesAct += 1;
+  seller.relicsSold = (seller.relicsSold ?? 0) + 1;
+  if (!buyer.tradePartners.includes(seller.id)) buyer.tradePartners.push(seller.id);
+  if (!seller.tradePartners.includes(buyer.id)) seller.tradePartners.push(buyer.id);
   const marked = [buyer, seller].find((player) => player.tradeTributeTo);
   if (marked?.tradeTributeTo) {
     const patron = players.find((player) => player.id === marked.tradeTributeTo);
@@ -889,11 +932,19 @@ export default function Home() {
     const players = onlineRoom.members.map((member, index): Player => {
       const character = CHARACTERS.find((candidate) => candidate.id === member.characterId) ?? CHARACTERS[index % CHARACTERS.length];
       const skills = member.skills;
-      return { id: member.userId, userId: member.userId, username: member.username, character, isHuman: member.userId === profile.id, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0 };
+      return { id: member.userId, userId: member.userId, username: member.username, character, isHuman: member.userId === profile.id, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0, intrigueOptions: shuffle(INTRIGUES).slice(0, 3).map((intrigue) => intrigue.id), intrigueId: null, intrigueChosen: false, relicsSold: 0, hostileActions: 0, tradePartners: [] };
     });
-    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createDeck(), log: ["Os convidados reais entraram no salão. Não há máscaras controladas pela casa."] };
+    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createDeck(), status: "intrigue", log: ["As Intrigas Secretas foram entregues. O primeiro lote aguarda todos selarem seus objetivos."] };
     sendSocket({ type: "room:start", gameState: initialGame });
     playTone("click");
+  };
+
+  const chooseIntrigue = (intrigueId: string) => {
+    commitGame((current) => {
+      const players = current.players.map((player) => player.isHuman && !player.intrigueChosen && player.intrigueOptions.includes(intrigueId) ? { ...player, intrigueId, intrigueChosen: true } : player);
+      return { ...current, players, log: appendLog(current, "Uma intriga foi selada sob uma máscara.") };
+    });
+    playTone("win");
   };
 
   const openAuction = () => {
@@ -912,8 +963,7 @@ export default function Home() {
 
   const continueGame = () => {
     if (game.lotIndex === game.deck.length - 1) {
-      const scores = game.players.map(calculateScore).sort((a, b) => b.total - a.total || b.relics - a.relics);
-      commitGame({ ...game, phase: "results", scores, rewardGranted: true });
+      commitGame({ ...game, status: "intrigueReveal", auction: null, lastAward: null, log: appendLog(game, "As máscaras caíram. A corte revelará suas Intrigas Secretas.") });
       playTone("click");
       return;
     }
@@ -925,6 +975,12 @@ export default function Home() {
       return { ...current, players, lotIndex: nextIndex, status: "announcement", auction: null, lastAward: null };
     });
     playTone("click");
+  };
+
+  const finalizeGame = () => {
+    const scores = game.players.map(calculateScore).sort((a, b) => b.total - a.total || b.relics - a.relics);
+    commitGame({ ...game, phase: "results", scores, rewardGranted: true });
+    playTone("win");
   };
 
   const castLegendVote = (humanVote: string) => {
@@ -1063,7 +1119,7 @@ export default function Home() {
   if (game.phase === "results") {
     const ranking = game.scores.map((score) => ({ score, player: game.players.find((player) => player.id === score.playerId)! }));
     const humanWon = ranking[0]?.player.isHuman;
-    return <main className="results-screen"><section className="results-content"><p className="eyebrow">A última badalada soou</p><h1>{humanWon ? "Você governa o baile" : `${ranking[0].player.character.name} governa o baile`}</h1><p className="selection-copy">{humanWon ? "Sua vitória rendeu 3 Lúmens." : "A corte guardou os Lúmens para o verdadeiro Soberano."}</p><div className="reward-banner"><span>✦</span><strong>{humanWon ? "+3 Lúmens" : "Nenhum Lúmen conquistado"}</strong><small>Saldo atual: {profile.lumens}</small></div><div className="podium">{ranking.map(({ score, player }, index) => <article className={`result-card place-${index + 1}`} key={player.id}><div className="place-number">{index + 1}º</div><div className="result-sigil">{player.character.sigil}</div><h2>{player.character.name}</h2><p>{player.skills.map((id) => TALENTS.find((talent) => talent.id === id)?.name).join(" · ")}</p><strong>{score.total} Prestígio</strong><div className="score-breakdown"><span>Relíquias <b>{score.relics}</b></span><span>Talentos e efeitos <b>{score.talents}</b></span><span>Combinações <b>{score.combos}</b></span><span>Ouro <b>{score.gold}</b></span><span>Maldições <b>−{score.curses}</b></span></div>{score.comboNames.length > 0 && <p className="combo-list">{score.comboNames.join(" • ")}</p>}<div className="result-inventory">{player.inventory.map((item, i) => <span title={item.name} key={`${item.id}-${i}`}>{item.icon}</span>)}</div></article>)}</div><div className="results-actions"><button className="primary-button" onClick={returnFromResults}>Voltar às salas</button></div></section></main>;
+    return <main className="results-screen"><section className="results-content"><p className="eyebrow">A última badalada soou</p><h1>{humanWon ? "Você governa o baile" : `${ranking[0].player.character.name} governa o baile`}</h1><p className="selection-copy">{humanWon ? "Sua vitória rendeu 3 Lúmens." : "A corte guardou os Lúmens para o verdadeiro Soberano."}</p><div className="reward-banner"><span>✦</span><strong>{humanWon ? "+3 Lúmens" : "Nenhum Lúmen conquistado"}</strong><small>Saldo atual: {profile.lumens}</small></div><div className="podium">{ranking.map(({ score, player }, index) => { const intrigue = INTRIGUES.find((item) => item.id === score.intrigueId); return <article className={`result-card place-${index + 1}`} key={player.id}><div className="place-number">{index + 1}º</div><div className="result-sigil">{player.character.sigil}</div><h2>{player.character.name}</h2><p>{player.skills.map((id) => TALENTS.find((talent) => talent.id === id)?.name).join(" · ")}</p><strong>{score.total} Prestígio</strong>{intrigue && <div className={`result-intrigue ${score.intrigue > 0 ? "complete" : "failed"}`}><span>{intrigue.icon}</span><div><small>Intriga {score.intrigue > 0 ? "cumprida" : "fracassada"}</small><b>{intrigue.name} · {score.intrigue > 0 ? `+${score.intrigue} ✦` : "+0 ✦"}</b></div></div>}<div className="score-breakdown"><span>Relíquias <b>{score.relics}</b></span><span>Talentos e efeitos <b>{score.talents}</b></span><span>Infusões no Museu <b>{score.infusions}</b></span><span>Intriga secreta <b>+{score.intrigue}</b></span><span>Ouro <b>{score.gold}</b></span><span>Maldições <b>−{score.curses}</b></span></div>{score.fusionNames.length > 0 && <p className="combo-list">{score.fusionNames.join(" • ")}</p>}<div className="result-inventory">{player.inventory.map((item, i) => <span title={item.name} key={`${item.id}-${i}`}>{item.icon}</span>)}</div></article>; })}</div><div className="results-actions"><button className="primary-button" onClick={returnFromResults}>Voltar às salas</button></div></section></main>;
   }
 
   const canManageMuseum = game.status === "announcement" || game.status === "awarded";
@@ -1076,10 +1132,12 @@ export default function Home() {
         <MuseumPanel player={human!} fusionCount={fusionRecipes.length} enabled={canManageMuseum} onInspect={(relic) => setDetailRelicId(relic.id)} onOpenFusion={() => setFusionOpen(true)} />
 
         <section className="relic-stage new-stage" aria-live="polite">
+          {game.status === "intrigue" && <IntrigueSelection player={human!} players={game.players} onChoose={chooseIntrigue} />}
           {game.status === "legendVote" && <LegendVote onVote={castLegendVote} voted={Boolean(human && game.legendVotes[human.id])} votes={Object.keys(game.legendVotes).length} total={game.players.length} />}
           {game.status === "voteResult" && game.voteOutcome && <VoteResult outcome={game.voteOutcome} onConfirm={confirmLegend} canConfirm={isRoomHost} />}
           {game.status === "actBreak" && <div className="act-interlude"><span className="interlude-number">Ato {game.act}</span><h2>{game.act === 4 ? "A Última Badalada" : game.act === 3 ? "A Galeria Proibida" : "O Salão dos Sussurros"}</h2><p>{ACT_TEXTS[game.act - 1]}</p><div className="income-note">Renda distribuída. Talentos de Fortuna e a Esmola do Anfitrião já foram aplicados.</div><button className="primary-button" disabled={!isRoomHost} onClick={() => commitGame((current) => ({ ...current, status: "announcement" }))}>{isRoomHost ? "Prosseguir" : "Aguardando o anfitrião"}</button></div>}
-          {!(["legendVote", "voteResult", "actBreak"] as GameStatus[]).includes(game.status) && currentRelic && <><div className={`relic-frame ${currentRelic.cursed ? "cursed" : ""} ${currentRelic.legendary ? "legendary" : ""}`}><span className="relic-icon">{currentRelic.icon}</span><span className="relic-number">{currentRelic.legendary ? "ITEM PROIBIDO" : `LOTE ${String(game.lotIndex + 1).padStart(2, "0")}`}</span></div><p className="relic-epithet">{currentRelic.epithet}</p><h2 className="relic-name">{currentRelic.name}</h2><div className="tag-row">{currentRelic.tags.map((tag) => <span key={tag}>{tag}</span>)}{currentRelic.cursed && <span className="curse-tag">Amaldiçoada</span>}{currentRelic.legendary && <span className="legend-tag">Lendária</span>}</div><p className="relic-lore">“{currentRelic.lore}”</p><div className="relic-stats"><div><small>Prestígio</small><strong>{currentRelic.prestige}</strong></div><div><small>Lance inicial</small><strong>{currentRelic.start}</strong></div></div><div className="effect-box active-preview"><span>{currentRelic.power.name}</span><p>{currentRelic.power.description}</p><small>Uso: uma vez por {currentRelic.power.once === "act" ? "ato" : "partida"}</small></div><AuctionControls game={game} human={human!} minimumBid={minimumBid} canBid={humanCanBid} canControl={isRoomHost} turnPlayer={turnPlayer} openAuction={openAuction} bid={(amount) => { commitGame((current) => placeBid(current, human!.id, amount)); playTone("bid"); }} pass={() => commitGame((current) => passTurn(current, human!.id))} next={continueGame} /></>}
+          {game.status === "intrigueReveal" && <IntrigueReveal players={game.players} canConfirm={isRoomHost && game.players.every((player) => Boolean(player.intrigueId))} onConfirm={finalizeGame} />}
+          {!(["intrigue", "legendVote", "voteResult", "actBreak", "intrigueReveal"] as GameStatus[]).includes(game.status) && currentRelic && <><div className={`relic-frame ${currentRelic.cursed ? "cursed" : ""} ${currentRelic.legendary ? "legendary" : ""}`}><span className="relic-icon">{currentRelic.icon}</span><span className="relic-number">{currentRelic.legendary ? "ITEM PROIBIDO" : `LOTE ${String(game.lotIndex + 1).padStart(2, "0")}`}</span></div><p className="relic-epithet">{currentRelic.epithet}</p><h2 className="relic-name">{currentRelic.name}</h2><div className="tag-row">{currentRelic.tags.map((tag) => <span key={tag}>{tag}</span>)}{currentRelic.cursed && <span className="curse-tag">Amaldiçoada</span>}{currentRelic.legendary && <span className="legend-tag">Lendária</span>}</div><p className="relic-lore">“{currentRelic.lore}”</p><div className="relic-stats"><div><small>Prestígio</small><strong>{currentRelic.prestige}</strong></div><div><small>Lance inicial</small><strong>{currentRelic.start}</strong></div></div><div className="effect-box active-preview"><span>{currentRelic.power.name}</span><p>{currentRelic.power.description}</p><small>Uso: uma vez por {currentRelic.power.once === "act" ? "ato" : "partida"}</small></div><AuctionControls game={game} human={human!} minimumBid={minimumBid} canBid={humanCanBid} canControl={isRoomHost} turnPlayer={turnPlayer} openAuction={openAuction} bid={(amount) => { commitGame((current) => placeBid(current, human!.id, amount)); playTone("bid"); }} pass={() => commitGame((current) => passTurn(current, human!.id))} next={continueGame} /></>}
         </section>
 
         <Dossier player={human!} relic={currentRelic} simulation={simulation} game={game} enabled={canManageMuseum} onUseTalent={(talent) => { if (talent.activeType === "bribe" || talent.activeType === "purify") setActiveTalentId(talent.id); else { commitGame((current) => executeTalentAction(current, human!.id, talent.id)); playTone("win"); } }} />
@@ -1122,11 +1180,11 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (profile: Profile) =
 function Intro({ profile, onEnter, onLibrary, onTalents, onRules, onLogout, rulesOpen, closeRules }: { profile: Profile; onEnter: () => void; onLibrary: () => void; onTalents: () => void; onRules: () => void; onLogout: () => void; rulesOpen: boolean; closeRules: () => void; }) {
   const character = CHARACTERS.find((item) => item.id === profile.characterId);
   const playLabel = character && profile.unlockedTalents.length > 0 ? "Entrar no salão online" : character ? "Escolher primeiro talento" : "Escolher minha máscara";
-  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para três ou quatro convidados. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header>{character ? <div className="menu-character"><span>{character.sigil}</span><div><small>Sua máscara permanente</small><strong>{character.name}</strong><p>{character.title}</p></div></div> : <div className="menu-character unbound"><span>◇</span><div><small>Identidade ainda velada</small><strong>Escolha sua máscara</strong><p>A aparência é permanente; a árvore define sua estratégia.</p></div></div>}<button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer · 3 ou 4 pessoas</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e proibidos</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar ou entrar numa mesa</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
+  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para três ou quatro convidados. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span><span><b>{INTRIGUES.length}</b> intrigas</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header>{character ? <div className="menu-character"><span>{character.sigil}</span><div><small>Sua máscara permanente</small><strong>{character.name}</strong><p>{character.title}</p></div></div> : <div className="menu-character unbound"><span>◇</span><div><small>Identidade ainda velada</small><strong>Escolha sua máscara</strong><p>A aparência é permanente; a árvore define sua estratégia.</p></div></div>}<button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer · 3 ou 4 pessoas</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e intrigas</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar ou entrar numa mesa</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
 }
 
 function LibraryScreen({ onBack }: { onBack: () => void; }) {
-  const [section, setSection] = useState<"relics" | "fusions" | "forbidden">("relics");
+  const [section, setSection] = useState<"relics" | "fusions" | "forbidden" | "intrigues">("relics");
   const [search, setSearch] = useState("");
   const query = search.trim().toLocaleLowerCase("pt-BR");
   const catalogue = [...RELICS, ...LEGENDARY_RELICS, ...FUSION_RECIPES.map((recipe) => recipe.result)];
@@ -1134,12 +1192,13 @@ function LibraryScreen({ onBack }: { onBack: () => void; }) {
   const matchesRelic = (relic: Relic) => !query || [relic.name, relic.epithet, relic.power.name, relic.power.description, relic.lore, ...relic.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query);
   const regular = RELICS.filter(matchesRelic);
   const forbidden = LEGENDARY_RELICS.filter(matchesRelic);
+  const intrigues = INTRIGUES.filter((intrigue) => !query || [intrigue.name, intrigue.description].join(" ").toLocaleLowerCase("pt-BR").includes(query));
   const fusions = FUSION_RECIPES.filter((recipe) => {
     const componentNames = recipe.components.map((id) => catalogueItem(id)?.name ?? id);
     return !query || [recipe.result.name, recipe.result.power.name, recipe.result.power.description, ...componentNames, ...recipe.result.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query);
   });
-  const resultCount = section === "relics" ? regular.length : section === "fusions" ? fusions.length : forbidden.length;
-  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão e os Itens Proibidos que podem ir à votação.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou tag…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "Peças que podem aparecer nos lotes comuns" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : "Candidatos que a corte escolhe durante a partida"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
+  const resultCount = section === "relics" ? regular.length : section === "fusions" ? fusions.length : section === "forbidden" ? forbidden.length : intrigues.length;
+  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "Peças que podem aparecer nos lotes comuns" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
 }
 
 function RelicLibraryCard({ relic, forbidden = false }: { relic: Relic; forbidden?: boolean }) {
@@ -1178,7 +1237,7 @@ function MuseumPanel({ player, fusionCount, enabled, onInspect, onOpenFusion }: 
 function AuctionControls({ game, human, minimumBid, canBid, canControl, turnPlayer, openAuction, bid, pass, next }: { game: GameState; human: Player; minimumBid: number; canBid: boolean; canControl: boolean; turnPlayer?: Player; openAuction: () => void; bid: (amount: number) => void; pass: () => void; next: () => void; }) {
   if (game.status === "announcement") return <div className="hammer-controls"><div><span>O Anfitrião aguarda</span><strong>O lote começa em {game.deck[game.lotIndex].start} moedas</strong></div><button className="primary-button" disabled={!canControl} onClick={openAuction}>{canControl ? "Abrir leilão" : "Aguardando o anfitrião"}</button></div>;
   if (game.status === "bidding") return <div className="hammer-controls bidding"><div className="current-offer"><span>Lance atual</span><strong>{game.auction?.highBidder ? game.auction.currentBid : "—"}</strong><small>{game.auction?.highBidder ? game.players.find((player) => player.id === game.auction?.highBidder)?.character.name : "Nenhuma oferta"}</small></div>{turnPlayer?.isHuman && human.blockedAuctions === 0 ? <div className="bid-actions"><button disabled={!canBid} onClick={() => bid(minimumBid)}>Oferecer {minimumBid}</button><button disabled={!canBid || minimumBid + 2 - human.bidDiscount > human.gold} onClick={() => bid(minimumBid + 2)}>Subir para {minimumBid + 2}</button><button className="pass-button" onClick={pass}>Abandonar</button></div> : <div className="thinking-wrap"><span>{human.blockedAuctions > 0 && turnPlayer?.isHuman ? "Você foi enfeitiçado…" : `${turnPlayer?.character.name ?? "A corte"} está decidindo…`}</span><div className="thinking"><i /><i /><i /></div></div>}</div>;
-  if (game.status === "awarded" && game.lastAward) return <div className="hammer-controls awarded"><div><span>{game.lastAward.winnerId ? "Martelo batido" : "Lote recusado"}</span><strong>{game.lastAward.winnerId ? `${game.players.find((player) => player.id === game.lastAward?.winnerId)?.username} pagou ${game.lastAward.price}` : game.lastAward.message}</strong><small>{game.lastAward.message}</small></div><button className="primary-button" disabled={!canControl} onClick={next}>{canControl ? game.lotIndex === game.deck.length - 1 ? "Revelar o soberano" : game.lotIndex === 5 ? "Votação proibida" : (game.lotIndex + 1) % 3 === 0 ? "Encerrar ato" : "Próximo lote" : "Aguardando o anfitrião"}</button></div>;
+  if (game.status === "awarded" && game.lastAward) return <div className="hammer-controls awarded"><div><span>{game.lastAward.winnerId ? "Martelo batido" : "Lote recusado"}</span><strong>{game.lastAward.winnerId ? `${game.players.find((player) => player.id === game.lastAward?.winnerId)?.username} pagou ${game.lastAward.price}` : game.lastAward.message}</strong><small>{game.lastAward.message}</small></div><button className="primary-button" disabled={!canControl} onClick={next}>{canControl ? game.lotIndex === game.deck.length - 1 ? "Revelar as intrigas" : game.lotIndex === 5 ? "Votação proibida" : (game.lotIndex + 1) % 3 === 0 ? "Encerrar ato" : "Próximo lote" : "Aguardando o anfitrião"}</button></div>;
   return null;
 }
 
@@ -1186,6 +1245,8 @@ function Dossier({ player, relic, simulation, game, enabled, onUseTalent }: { pl
   const activeTalents = player.skills.map((id) => TALENTS.find((talent) => talent.id === id)).filter((talent): talent is Talent => Boolean(talent?.activeType));
   const incomeTax = player.inventory.reduce((sum, item) => sum + (!item.curseSuppressed ? item.curse?.incomePenalty ?? 0 : 0), 0);
   const interest = hasSkill(player, "marked-catalogue") && relic ? game.players.filter((candidate) => candidate.id !== player.id && candidate.gold >= relic.start + 3).map((candidate) => candidate.username) : [];
+  const intrigue = INTRIGUES.find((item) => item.id === player.intrigueId);
+  const intrigueState = intrigue ? intrigueProgress(player, intrigue.id) : null;
   const canUseTalent = (talent: Talent) => {
     if (!enabled || !talent.activeType) return false;
     if (player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id)) return false;
@@ -1195,7 +1256,19 @@ function Dossier({ player, relic, simulation, game, enabled, onUseTalent }: { pl
     if (talent.activeType === "prioritySeal") return true;
     return true;
   };
-  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["legendVote","voteResult","actBreak"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{artifactLimit(player)}</b></span></section>{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Podem subir 3 moedas: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
+  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["intrigue","legendVote","voteResult","actBreak","intrigueReveal"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{artifactLimit(player)}</b></span></section>{intrigue && intrigueState && <section className={`secret-intrigue ${intrigueState.complete ? "complete" : ""}`}><header><span>{intrigue.icon}</span><div><small>Sua Intriga Secreta</small><strong>{intrigue.name}</strong></div><b>+{intrigue.reward} ✦</b></header><p>{intrigue.description}</p><div><i style={{ width: `${Math.min(100, (intrigueState.current / intrigueState.target) * 100)}%` }} /></div><small>{intrigueState.label}</small></section>}{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Podem subir 3 moedas: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
+}
+
+function IntrigueSelection({ player, players, onChoose }: { player: Player; players: Player[]; onChoose: (id: string) => void; }) {
+  const chosen = INTRIGUES.find((item) => item.id === player.intrigueId);
+  const chosenCount = players.filter((candidate) => candidate.intrigueChosen || candidate.intrigueId).length;
+  const options = player.intrigueOptions.map((id) => INTRIGUES.find((item) => item.id === id)).filter((item): item is Intrigue => Boolean(item));
+  if (chosen) return <div className="intrigue-wait"><span className="intrigue-main-icon">{chosen.icon}</span><p className="eyebrow">Intriga selada · {chosenCount}/{players.length}</p><h2>{chosen.name}</h2><p>{chosen.description}</p><div className="intrigue-reward">Recompensa secreta <b>+{chosen.reward} Prestígio</b></div><small>Seu objetivo permanece invisível aos rivais. O primeiro lote será apresentado quando todos fizerem suas escolhas.</small><div className="sealed-players">{players.map((candidate) => <span className={candidate.intrigueChosen || candidate.intrigueId ? "sealed" : ""} key={candidate.id}>{candidate.character.sigil} {candidate.username} {candidate.intrigueChosen || candidate.intrigueId ? "✓" : "…"}</span>)}</div></div>;
+  return <div className="intrigue-selection"><p className="eyebrow">Antes do primeiro martelo · {chosenCount}/{players.length} escolhas</p><h2>Escolha sua Intriga Secreta</h2><p>Somente você verá este objetivo. Cumpra-o até a última badalada para receber Prestígio adicional.</p><div className="intrigue-options">{options.map((intrigue) => <button key={intrigue.id} onClick={() => onChoose(intrigue.id)}><span>{intrigue.icon}</span><small>Recompensa · +{intrigue.reward} ✦</small><strong>{intrigue.name}</strong><p>{intrigue.description}</p><b>Selar esta intriga</b></button>)}</div><small className="intrigue-warning">A escolha é definitiva para esta partida e será revelada a todos no final.</small></div>;
+}
+
+function IntrigueReveal({ players, canConfirm, onConfirm }: { players: Player[]; canConfirm: boolean; onConfirm: () => void; }) {
+  return <div className="intrigue-reveal"><p className="eyebrow">A última badalada · máscaras ao chão</p><h2>As Intrigas são reveladas</h2><p>Objetivos cumpridos acrescentam Prestígio antes da coroação do Soberano.</p><div className="intrigue-reveal-grid">{players.map((player) => { const intrigue = INTRIGUES.find((item) => item.id === player.intrigueId); const progress = intrigueProgress(player); return <article className={progress.complete ? "complete" : "failed"} key={player.id}><span>{intrigue?.icon ?? "◇"}</span><div><small>{player.username} · {player.character.name}</small><strong>{intrigue?.name ?? "Intriga perdida"}</strong><p>{intrigue?.description}</p><b>{progress.label}</b></div><em>{progress.complete ? `+${intrigue?.reward ?? 0} ✦` : "Fracassou"}</em></article>; })}</div><button className="primary-button" disabled={!canConfirm} onClick={onConfirm}>{canConfirm ? "Coroar o Soberano" : "Aguardando o anfitrião"}</button></div>;
 }
 
 function LegendVote({ onVote, voted, votes, total }: { onVote: (id: string) => void; voted: boolean; votes: number; total: number; }) {
@@ -1254,5 +1327,5 @@ function CounterOfferModal({ offer, seller, relic, onAccept, onDecline }: { offe
 }
 
 function RulesModal({ onClose }: { onClose: () => void; }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>02</span><div><strong>Compre relíquias</strong><p>Use ouro nos leilões. Relíquias geram Prestígio, poderes ativos e às vezes maldições.</p></div></article><article><span>03</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>04</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>05</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Relíquias fundidas também podem ser negociadas.</p></div></article><article><span>06</span><div><strong>Vote no proibido</strong><p>A corte escolhe entre sete Itens Proibidos. O vencedor substitui o primeiro lote do ato seguinte e alguns deles completam infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Quem terminar com mais Prestígio vence. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Sele sua intriga</strong><p>Antes do primeiro lote, escolha um de três objetivos secretos. Se cumprir a condição, ganhe de 4 a 5 Prestígios na revelação final.</p></div></article><article><span>02</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>03</span><div><strong>Compre relíquias</strong><p>Use ouro nos leilões. Relíquias geram Prestígio, poderes ativos e às vezes maldições.</p></div></article><article><span>04</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>05</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>06</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Negociações também podem avançar sua Intriga Secreta.</p></div></article><article><span>07</span><div><strong>Vote no proibido</strong><p>A corte escolhe entre sete Itens Proibidos. O vencedor substitui o primeiro lote do ato seguinte e alguns deles completam infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Relíquias, efeitos, ouro e Intrigas cumpridas formam o Prestígio final. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
 }

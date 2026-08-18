@@ -74,16 +74,43 @@ test("three real players can create, fill, ready and synchronize a room", async 
 
   for (const client of clients) client.socket.send(JSON.stringify({ type: "room:ready", ready: true }));
   const ready = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 3 && message.room.members.every((member) => member.ready));
-  const players = ready.room.members.map((member) => ({ id: member.userId, userId: member.userId, username: member.username, isHuman: false }));
-  const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "announcement", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
+  const players = ready.room.members.map((member) => ({ id: member.userId, userId: member.userId, username: member.username, isHuman: false, intrigueOptions: ["blue-blood", "dead-merchant", "bloodied-hands"], intrigueId: null, intrigueChosen: false }));
+  const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "intrigue", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
   clients[0].socket.send(JSON.stringify({ type: "room:start", gameState: initialGame }));
   const started = await clients[1].waitFor((message) => message.type === "room:snapshot" && message.room.status === "playing");
   assert.equal(started.room.version, 1);
+  assert.equal(started.room.gameState.players.find((player) => player.id === accounts[1].profile.id).intrigueOptions.length, 3);
+  assert.equal(started.room.gameState.players.find((player) => player.id === accounts[0].profile.id).intrigueOptions.length, 0);
 
-  const nextGame = { ...initialGame, log: ["lance sincronizado"] };
+  const nextGame = { ...initialGame, players: initialGame.players.map((player) => player.id === accounts[1].profile.id ? { ...player, intrigueId: "blue-blood", intrigueChosen: true } : player), log: ["lance sincronizado"] };
   clients[1].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 1, gameState: nextGame }));
   const synchronized = await clients[2].waitFor((message) => message.type === "room:snapshot" && message.room.version === 2);
   assert.deepEqual(synchronized.room.gameState.log, ["lance sincronizado"]);
+  const hiddenChoice = synchronized.room.gameState.players.find((player) => player.id === accounts[1].profile.id);
+  assert.equal(hiddenChoice.intrigueId, null);
+  assert.equal(hiddenChoice.intrigueChosen, true);
+
+  const hostChoice = { ...initialGame, players: initialGame.players.map((player) => player.id === accounts[0].profile.id ? { ...player, intrigueId: "dead-merchant", intrigueChosen: true } : player) };
+  clients[0].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 2, gameState: hostChoice }));
+  await clients[1].waitFor((message) => message.type === "room:snapshot" && message.room.version === 3);
+
+  const finalChoice = { ...initialGame, players: initialGame.players.map((player) => player.id === accounts[2].profile.id ? { ...player, intrigueId: "bloodied-hands", intrigueChosen: true } : player) };
+  clients[2].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 3, gameState: finalChoice }));
+  const allSealed = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.version === 4);
+  assert.equal(allSealed.room.gameState.status, "announcement");
+  assert.ok(allSealed.room.gameState.players.every((player) => player.intrigueChosen));
+  assert.equal(allSealed.room.gameState.players.filter((player) => player.intrigueId).length, 1, "antes do final, o anfitrião só conhece a própria intriga");
+
+  clients[1].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 4, gameState: { ...allSealed.room.gameState, status: "intrigueReveal" } }));
+  const earlyReveal = await clients[1].waitFor((message) => message.type === "error" && /revelação/i.test(message.message));
+  assert.ok(earlyReveal);
+
+  const finalAward = { ...allSealed.room.gameState, deck: [{ id: "final-lot" }], lotIndex: 0, status: "awarded", lastAward: { winnerId: accounts[0].profile.id, price: 1, message: "Último lote" } };
+  clients[0].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 4, gameState: finalAward }));
+  const awarded = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.version === 5);
+  clients[0].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 5, gameState: { ...awarded.room.gameState, status: "intrigueReveal" } }));
+  const revealed = await clients[1].waitFor((message) => message.type === "room:snapshot" && message.room.version === 6);
+  assert.ok(revealed.room.gameState.players.every((player) => player.intrigueId), "a revelação final abre todas as intrigas");
   clients.forEach((client) => client.socket.close());
 });
 
@@ -100,8 +127,8 @@ test("a four-player room only starts after all four guests are ready", async () 
   await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 4);
   for (const client of clients) client.socket.send(JSON.stringify({ type: "room:ready", ready: true }));
   const ready = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 4 && message.room.members.every((member) => member.ready));
-  const players = ready.room.members.map((member) => ({ id: member.userId, userId: member.userId, username: member.username, isHuman: false }));
-  const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "announcement", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
+  const players = ready.room.members.map((member) => ({ id: member.userId, userId: member.userId, username: member.username, isHuman: false, intrigueOptions: ["forbidden-devotee", "cursed-museum", "last-bettor"], intrigueId: null, intrigueChosen: false }));
+  const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "intrigue", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
   clients[0].socket.send(JSON.stringify({ type: "room:start", gameState: initialGame }));
   const started = await clients[3].waitFor((message) => message.type === "room:snapshot" && message.room.status === "playing");
   assert.equal(started.room.members.length, 4);

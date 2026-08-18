@@ -19,6 +19,7 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 const SESSION_COOKIE = "midnight_session";
 const ROOM_TTL = 1000 * 60 * 60 * 8;
 const CHARACTER_IDS = new Set(["cajango", "feliciano", "dialgo", "dimas"]);
+const INTRIGUE_IDS = new Set(["blue-blood", "dead-merchant", "bloodied-hands", "forbidden-devotee", "cursed-museum", "last-bettor", "obsessive-collector", "court-conspirator"]);
 
 class JsonStore {
   constructor() {
@@ -173,7 +174,7 @@ function roomSnapshot(room, viewerId) {
     status: room.status,
     version: room.version,
     viewerId,
-    gameState: room.gameState ?? null,
+    gameState: gameStateForViewer(room.gameState, viewerId),
     members: room.members.map((member, seat) => {
       const user = store.data.users.find((candidate) => candidate.id === member.userId);
       return {
@@ -188,6 +189,20 @@ function roomSnapshot(room, viewerId) {
         isHost: member.userId === room.hostUserId,
       };
     }),
+  };
+}
+
+function gameStateForViewer(gameState, viewerId) {
+  if (!gameState || !Array.isArray(gameState.players)) return gameState ?? null;
+  const revealIntrigues = gameState.phase === "results" || gameState.status === "intrigueReveal";
+  return {
+    ...gameState,
+    players: gameState.players.map((player) => ({
+      ...player,
+      intrigueOptions: player.id === viewerId ? [...(player.intrigueOptions ?? [])] : [],
+      intrigueId: revealIntrigues || player.id === viewerId ? player.intrigueId ?? null : null,
+      intrigueChosen: Boolean(player.intrigueId),
+    })),
   };
 }
 
@@ -222,6 +237,47 @@ function validateGameState(room, gameState) {
   const memberIds = [...room.members.map((member) => member.userId)].sort();
   const playerIds = [...gameState.players.map((player) => player.id)].sort();
   return memberIds.length === playerIds.length && memberIds.every((id, index) => id === playerIds[index]);
+}
+
+function validateInitialIntrigues(gameState) {
+  return gameState?.status === "intrigue" && gameState.players.every((player) => {
+    const options = Array.isArray(player.intrigueOptions) ? player.intrigueOptions : [];
+    return options.length === 3 && new Set(options).size === 3 && options.every((id) => INTRIGUE_IDS.has(id)) && !player.intrigueId && !player.intrigueChosen;
+  });
+}
+
+function mergeIntrigueSecrets(room, incomingState, actorId) {
+  const previousState = room.gameState;
+  if (!previousState?.players) return incomingState;
+  const players = incomingState.players.map((incomingPlayer) => {
+    const previousPlayer = previousState.players.find((player) => player.id === incomingPlayer.id);
+    if (!previousPlayer) return incomingPlayer;
+    const options = [...(previousPlayer.intrigueOptions ?? [])];
+    let intrigueId = previousPlayer.intrigueId ?? null;
+    if (!intrigueId && previousState.status === "intrigue" && incomingPlayer.id === actorId && options.includes(incomingPlayer.intrigueId)) intrigueId = incomingPlayer.intrigueId;
+    return { ...incomingPlayer, intrigueOptions: options, intrigueId, intrigueChosen: Boolean(intrigueId) };
+  });
+  let status = incomingState.status;
+  let log = incomingState.log;
+  if (previousState.status === "intrigue") {
+    const allChosen = players.every((player) => Boolean(player.intrigueId));
+    status = allChosen ? "announcement" : "intrigue";
+    if (allChosen) log = ["Todas as intrigas foram seladas. O primeiro lote será apresentado.", ...(Array.isArray(log) ? log : [])].slice(0, 10);
+  } else if (incomingState.status === "intrigue") {
+    status = previousState.status;
+  }
+  return { ...incomingState, players, status, log };
+}
+
+function validateIntrigueTransition(room, previousState, incomingState, actorId) {
+  if (incomingState.status === "intrigueReveal" && previousState?.status !== "intrigueReveal") {
+    const finalLot = Array.isArray(previousState?.deck) && previousState.deck.length > 0 && previousState.lotIndex === previousState.deck.length - 1;
+    if (actorId !== room.hostUserId || previousState?.status !== "awarded" || !finalLot) return false;
+  }
+  if (incomingState.phase === "results" && previousState?.phase !== "results") {
+    if (actorId !== room.hostUserId || previousState?.status !== "intrigueReveal" || !previousState.players.every((player) => Boolean(player.intrigueId))) return false;
+  }
+  return true;
 }
 
 async function awardWinner(room, previousState, nextState) {
@@ -420,7 +476,7 @@ webSocketServer.on("connection", (socket, _request, user) => {
       if (message.type === "room:start") {
         if (room.hostUserId !== user.id) return sendError(socket, "Somente o anfitrião pode abrir o baile.");
         if (room.status !== "waiting" || room.members.length !== room.maxPlayers || room.members.some((candidate) => !candidate.ready)) return sendError(socket, `A mesa precisa de ${room.maxPlayers} convidados prontos.`);
-        if (!validateGameState(room, message.gameState) || message.gameState.phase !== "playing") return sendError(socket, "O estado inicial da partida é inválido.");
+        if (!validateGameState(room, message.gameState) || message.gameState.phase !== "playing" || !validateInitialIntrigues(message.gameState)) return sendError(socket, "O estado inicial da partida é inválido.");
         room.gameState = message.gameState;
         room.status = "playing";
         room.version += 1;
@@ -438,11 +494,13 @@ webSocketServer.on("connection", (socket, _request, user) => {
         }
         if (!validateGameState(room, message.gameState)) return sendError(socket, "Atualização de partida recusada.");
         const previousState = room.gameState;
-        await awardWinner(room, previousState, message.gameState);
-        room.gameState = message.gameState;
+        if (!validateIntrigueTransition(room, previousState, message.gameState, user.id)) return sendError(socket, "A revelação das intrigas ainda não foi autorizada.");
+        const nextState = mergeIntrigueSecrets(room, message.gameState, user.id);
+        await awardWinner(room, previousState, nextState);
+        room.gameState = nextState;
         room.version += 1;
         room.updatedAt = Date.now();
-        if (message.gameState.phase === "results") room.status = "finished";
+        if (nextState.phase === "results") room.status = "finished";
         await store.save();
         broadcastRoom(room); broadcastLobby();
         return;

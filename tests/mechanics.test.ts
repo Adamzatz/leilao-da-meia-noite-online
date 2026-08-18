@@ -7,9 +7,11 @@ import {
   RELICS,
   TALENTS,
   artifactLimit,
+  calculateScore,
   completeTrade,
   executeRelicAction,
   executeTalentAction,
+  intrigueProgress,
   type GameState,
   type Player,
 } from "../src/App.tsx";
@@ -45,6 +47,12 @@ function player(id: string, overrides: Partial<Player> = {}): Player {
     decreeStake: 0,
     discordPatron: null,
     discordPenalty: 0,
+    intrigueOptions: [],
+    intrigueId: null,
+    intrigueChosen: false,
+    relicsSold: 0,
+    hostileActions: 0,
+    tradePartners: [],
     ...overrides,
   };
 }
@@ -88,6 +96,9 @@ test("Língua de Prata e Carta do Duque devolvem moedas numa compra real", () =>
   assert.equal(result.players[1].gold, 6, "o vendedor recebe o valor integral combinado");
   assert.equal(result.players[0].tradeCharm, 0);
   assert.equal(result.players[0].inventory[0].id, relic.id);
+  assert.equal(result.players[1].relicsSold, 1);
+  assert.deepEqual(result.players[0].tradePartners, [seller.id]);
+  assert.deepEqual(result.players[1].tradePartners, [buyer.id]);
 });
 
 test("Rosto que Nunca Existiu afeta o Museu rival no estado multiplayer", () => {
@@ -101,6 +112,7 @@ test("Rosto que Nunca Existiu afeta o Museu rival no estado multiplayer", () => 
   assert.equal(result.players[1].prestigeBonus, -1);
   assert.equal(result.players[1].inventory[0].exhaustedLots, 1);
   assert.equal(result.players[0].inventory[0].usedGame, true);
+  assert.equal(result.players[0].hostileActions, 1);
 });
 
 test("descrições revisadas correspondem a efeitos implementados", () => {
@@ -142,4 +154,33 @@ test("Livro dos Últimos Nomes rouba Prestígio sem sorte local", () => {
   assert.equal(result.players[0].prestigeBonus, 2);
   assert.equal(result.players[1].prestigeBonus, 2);
   assert.equal(result.players[0].inventory[0].usedGame, true);
+});
+
+test("as oito Intrigas Secretas possuem progresso calculável", () => {
+  const royal = RELICS.filter((item) => item.tags.includes("Realeza")).slice(0, 3).map((item) => structuredClone(item));
+  const cursed = RELICS.filter((item) => item.cursed).slice(0, 3).map((item) => structuredClone(item));
+  const legendary = structuredClone(LEGENDARY_RELICS[0]);
+  const collection = RELICS.slice(0, 5).map((item) => structuredClone(item));
+  const cases: Array<[string, Partial<Player>]> = [
+    ["blue-blood", { inventory: royal }],
+    ["dead-merchant", { relicsSold: 2 }],
+    ["bloodied-hands", { hostileActions: 3 }],
+    ["forbidden-devotee", { inventory: [legendary] }],
+    ["cursed-museum", { inventory: cursed }],
+    ["last-bettor", { gold: 1 }],
+    ["obsessive-collector", { inventory: collection }],
+    ["court-conspirator", { tradePartners: ["rival-a", "rival-b"] }],
+  ];
+
+  for (const [intrigueId, overrides] of cases) assert.equal(intrigueProgress(player("buyer", { ...overrides, intrigueId })).complete, true, intrigueId);
+});
+
+test("Intriga cumprida entra no Prestígio final", () => {
+  const inventory = RELICS.filter((item) => item.tags.includes("Realeza")).slice(0, 3).map((item) => structuredClone(item));
+  const contender = player("buyer", { gold: 0, inventory, intrigueId: "blue-blood", intrigueChosen: true });
+  const score = calculateScore(contender);
+
+  assert.equal(score.intrigue, 4);
+  assert.equal(score.intrigueId, "blue-blood");
+  assert.equal(score.total, score.relics + score.talents + score.gold + 4 - score.curses);
 });
