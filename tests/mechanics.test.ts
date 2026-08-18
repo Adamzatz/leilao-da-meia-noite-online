@@ -7,6 +7,7 @@ import {
   RELICS,
   TALENTS,
   artifactLimit,
+  artifactWindowState,
   acceptTradeOffer,
   beginAuction,
   calculateScore,
@@ -291,6 +292,20 @@ test("Terceira Chave permite a terceira ativação sincronizada", () => {
   assert.equal(result.players[0].artifactsUsedAct, 3);
   assert.equal(result.players[0].gold, 12);
   assert.equal(result.players[0].inventory[0].usedAct, true);
+});
+
+test("mostrador do Museu abre, aguarda o martelo e respeita o limite do ato", () => {
+  const relic = structuredClone(RELICS.find((item) => item.id === "widow-ring")!);
+  const holder = player("buyer", { inventory: [relic] });
+
+  assert.deepEqual(artifactWindowState(holder, "announcement"), {
+    mode: "open",
+    readyCount: 1,
+    label: "Janela aberta",
+    detail: "1 artefato pode ser ativado agora.",
+  });
+  assert.equal(artifactWindowState(holder, "bidding").mode, "bidding");
+  assert.equal(artifactWindowState({ ...holder, artifactsUsedAct: artifactLimit(holder) }, "announcement").mode, "spent");
 });
 
 test("catálogo proibido possui oito candidatos únicos e utilizáveis", () => {
