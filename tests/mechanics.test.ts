@@ -10,6 +10,7 @@ import {
   beginAuction,
   calculateScore,
   completeTrade,
+  distributeIncome,
   executeRelicAction,
   executeTalentAction,
   intrigueProgress,
@@ -148,6 +149,29 @@ test("descrições revisadas correspondem a efeitos implementados", () => {
   assert.match(TALENTS.find((item) => item.id === "silver-tongue")!.description, /recupere 1 moeda/i);
   assert.equal(FUSION_RECIPES.find((item) => item.id === "recipe-buried-monarch")!.result.curse?.incomePenalty, 1);
   assert.match(FUSION_RECIPES.find((item) => item.id === "recipe-discord-garden")!.result.power.description, /até vender uma relíquia/i);
+});
+
+test("Maçã Solar mantém Prestígio e cobra sua maldição na renda", () => {
+  const apple = structuredClone(RELICS.find((item) => item.id === "golden-apple")!);
+  const holder = player("buyer", { gold: 10, inventory: [apple] });
+  const rival = player("rival", { gold: 0 });
+  const result = distributeIncome(game([holder, rival]), 1);
+
+  assert.equal(apple.prestige, 3);
+  assert.equal(apple.curse?.penalty ?? 0, 0);
+  assert.equal(apple.curse?.incomePenalty, 2);
+  assert.equal(result.players.find((candidate) => candidate.id === holder.id)?.gold, 13, "recebe 5 de renda menos 2 da maldição");
+});
+
+test("Presente Solar transfere a Maçã e a maldição econômica ao rival", () => {
+  const apple = structuredClone(RELICS.find((item) => item.id === "golden-apple")!);
+  const actor = player("buyer", { inventory: [apple] });
+  const rival = player("rival");
+  const result = executeRelicAction(game([actor, rival]), actor.id, apple.id, rival.id);
+
+  assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.gold, 13);
+  assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.inventory.some((item) => item.id === apple.id), false);
+  assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.inventory.find((item) => item.id === apple.id)?.curse?.incomePenalty, 2);
 });
 
 test("talentos da Glória ampliam o limite real de artefatos", () => {

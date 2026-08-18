@@ -81,6 +81,12 @@ Infusões já possuem seu próprio valor de Prestígio e substituem as peças co
 
 São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro talento é gratuito; os seguintes custam 2, 3, 5, 8 ou 12 conforme a profundidade da árvore.
 
+### Maldições
+
+Relíquias amaldiçoadas são peças premium com um preço tático, não armadilhas sem recompensa. Uma penalidade direta nunca reduz uma relíquia comum amaldiçoada abaixo de 2 Prestígios líquidos. Cumprir a condição da maldição ou purificá-la recupera o valor premium completo.
+
+Maldições econômicas preservam o Prestígio da peça e descontam a renda entre atos. A Maçã Solar de Luna, por exemplo, vale 3 Prestígios e reduz a renda em 2 moedas por ato; seu poder transfere tanto a relíquia quanto esse custo econômico a um rival.
+
 ## Conteúdo atual
 
 | Sistema | Quantidade | Função |

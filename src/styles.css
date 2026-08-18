@@ -770,6 +770,18 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .tag-row .legend-tag { border-color: #e9cf77; color: #ecd988; }
 .effect-box.active-preview { margin-bottom: 13px; }
 .effect-box.active-preview small { color: #625b50; font-size: .52rem; }
+.auction-curse-preview {
+  z-index: 1;
+  width: min(470px, 100%);
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(154,55,62,.38);
+  background: linear-gradient(90deg, rgba(73,20,25,.24), rgba(31,14,17,.12));
+  text-align: left;
+}
+.auction-curse-preview span { color: #d58f93; font-size: .54rem; text-transform: uppercase; letter-spacing: .13em; }
+.auction-curse-preview p { margin: 4px 0; color: #b9a4a1; font-size: .65rem; line-height: 1.35; }
+.auction-curse-preview small { color: #8e706d; font-size: .53rem; }
 
 .hammer-controls {
   width: min(540px, 100%);

@@ -89,3 +89,10 @@ test("as Intrigas Secretas cobrem oito estratégias e recompensas controladas", 
   assert.ok(INTRIGUES.every((intrigue) => intrigue.reward >= 4 && intrigue.reward <= 5));
   assert.ok(INTRIGUES.every((intrigue) => intrigue.target >= 1));
 });
+
+test("relíquias comuns amaldiçoadas preservam valor mínimo de Prestígio", () => {
+  const directPenalty = RELICS.filter((relic) => relic.cursed && (relic.curse?.penalty ?? 0) > 0);
+
+  assert.ok(directPenalty.length > 0);
+  assert.ok(directPenalty.every((relic) => relic.prestige - (relic.curse?.penalty ?? 0) >= 2));
+});
