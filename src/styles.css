@@ -71,7 +71,8 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 
 /* Menu principal e Biblioteca da Meia-Noite */
 .main-menu-shell { width: min(1240px, 100%); display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(420px, .95fr); gap: clamp(30px, 6vw, 78px); align-items: center; position: relative; z-index: 1; animation: arrive .8s ease-out both; }
-.menu-hero { padding: 24px 0; text-align: left; }
+.menu-hero { position: relative; padding: 24px 0; text-align: left; }
+.menu-hero::after { content: "CRÔNICAS DOS 29 NOMES"; display: inline-block; margin-top: 18px; padding: 6px 10px; border: 1px solid rgba(211,174,77,.27); color: #9b8454; background: linear-gradient(90deg, rgba(112,69,20,.13), rgba(82,42,89,.08)); font-size: .5rem; letter-spacing: .18em; }
 .menu-crest { display: block; margin-bottom: 18px; color: var(--gold-bright); font-size: 3rem; line-height: 1; text-shadow: 0 0 34px rgba(236,208,120,.25); }
 .menu-hero h1 { margin: 0; color: var(--gold-bright); font-size: clamp(4.3rem, 8vw, 7.5rem); font-weight: 500; line-height: .78; letter-spacing: -.06em; text-shadow: 0 4px 38px rgba(202,168,90,.18); }
 .menu-hero .gold-rule { margin: 25px 0; }
@@ -136,6 +137,7 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .library-card:hover { border-color: rgba(225,195,111,.42); }
 .library-card.cursed { border-color: rgba(137,55,62,.37); background: linear-gradient(150deg, rgba(51,21,24,.65), rgba(7,6,6,.95) 62%); }
 .library-card.forbidden { border-color: rgba(224,195,105,.43); background: radial-gradient(circle at 10% 0, rgba(181,118,35,.13), transparent 30%), linear-gradient(150deg, rgba(37,25,20,.82), rgba(7,6,6,.96)); }
+.library-card.creator { border-color: rgba(248,215,112,.78); background: radial-gradient(circle at 12% 0, rgba(246,190,55,.28), transparent 42%), radial-gradient(circle at 90% 100%, rgba(143,82,189,.16), transparent 46%), linear-gradient(150deg, rgba(50,31,19,.94), rgba(7,6,8,.98)); box-shadow: inset 0 0 44px rgba(228,174,49,.12), 0 0 24px rgba(208,156,49,.12); }
 .library-card > header { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .library-icon { width: 52px; height: 58px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold-bright); background: rgba(0,0,0,.26); font-size: 1.65rem; text-shadow: 0 0 18px rgba(236,208,120,.2); }
 .library-card > header > div { min-width: 0; }
@@ -143,6 +145,10 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .library-card h2 { margin: 4px 0 3px; color: #dbcdae; font-size: 1.02rem; font-weight: 400; }
 .library-card > header p { overflow: hidden; margin: 0; color: #6e6659; font-size: .54rem; font-style: italic; text-overflow: ellipsis; white-space: nowrap; }
 .library-card > header > b { color: var(--gold-bright); font-size: .68rem; font-weight: 400; white-space: nowrap; }
+.lore-signature { display: grid; grid-template-columns: 24px auto 1fr; gap: 7px; align-items: center; margin: 12px 0 4px; padding: 7px 9px; border: 1px solid rgba(211,174,77,.28); background: linear-gradient(90deg, rgba(113,70,24,.2), rgba(74,39,79,.09)); }
+.lore-signature > span { color: #e6c66c; text-align: center; text-shadow: 0 0 12px rgba(230,198,108,.42); }
+.lore-signature > small { color: #8e7d5c; font-size: .46rem; letter-spacing: .1em; text-transform: uppercase; }
+.lore-signature > strong { overflow: hidden; color: #d8c48f; font-size: .57rem; font-weight: 400; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .library-statline { display: flex; gap: 16px; margin: 13px 0 9px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #6f6658; font-size: .52rem; }
 .library-statline b { color: #bda86e; font-weight: 400; }
 .library-power { margin-top: 11px; padding: 11px; border-left: 2px solid var(--gold-dim); background: rgba(185,149,75,.045); }
@@ -153,6 +159,7 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .library-card > footer { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
 .library-card > footer span { padding: 3px 6px; border: 1px solid rgba(185,149,75,.17); color: #776b54; font-size: .47rem; text-transform: uppercase; letter-spacing: .07em; }
 .library-card > footer span.danger { border-color: rgba(145,52,59,.28); color: #a56669; }
+.library-card > footer span.creator-tag { border-color: rgba(235,193,79,.5); color: #efd782; background: rgba(155,103,25,.13); }
 .library-components { display: flex; align-items: stretch; gap: 5px; margin: 13px 0 8px; padding: 9px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .library-components > span { min-width: 0; flex: 1; display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; position: relative; }
 .library-components i { width: 21px; height: 24px; display: grid; place-items: center; border: 1px solid rgba(185,149,75,.2); color: var(--gold); font-style: normal; font-size: .64rem; }

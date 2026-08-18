@@ -139,8 +139,8 @@ test("Terceira Chave permite a terceira ativação sincronizada", () => {
   assert.equal(result.players[0].inventory[0].usedAct, true);
 });
 
-test("catálogo proibido possui sete candidatos únicos e utilizáveis", () => {
-  assert.equal(LEGENDARY_RELICS.length, 7);
+test("catálogo proibido possui oito candidatos únicos e utilizáveis", () => {
+  assert.equal(LEGENDARY_RELICS.length, 8);
   assert.equal(new Set(LEGENDARY_RELICS.map((item) => item.id)).size, LEGENDARY_RELICS.length);
   assert.ok(LEGENDARY_RELICS.every((item) => item.legendary && item.power.description.length > 0));
 });
@@ -153,6 +153,18 @@ test("Livro dos Últimos Nomes rouba Prestígio sem sorte local", () => {
 
   assert.equal(result.players[0].prestigeBonus, 2);
   assert.equal(result.players[1].prestigeBonus, 2);
+  assert.equal(result.players[0].inventory[0].usedGame, true);
+});
+
+test("FABIANA reescreve recursos e o limite de ativações no estado compartilhado", () => {
+  const fabiana = structuredClone(LEGENDARY_RELICS.find((item) => item.id === "fabiana-creator")!);
+  const actor = player("buyer", { gold: 4, inventory: [fabiana] });
+  const result = executeRelicAction(game([actor, player("rival")]), actor.id, fabiana.id);
+
+  assert.equal(result.players[0].gold, 9);
+  assert.equal(result.players[0].prestigeBonus, 5);
+  assert.equal(result.players[0].ward, 1);
+  assert.equal(result.players[0].extraArtifactsAct, 1);
   assert.equal(result.players[0].inventory[0].usedGame, true);
 });
 

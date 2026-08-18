@@ -26,7 +26,7 @@ flowchart TD
   F --> G[Ato 1: 3 lotes]
   G --> H[Renda e reset do Museu]
   H --> I[Ato 2: 3 lotes]
-  I --> J[Votação entre 7 Itens Proibidos]
+  I --> J[Votação entre 8 Itens Proibidos]
   J --> K[Ato 3: Item Proibido + 2 lotes]
   K --> L[Renda e reset do Museu]
   L --> M[Ato 4: 3 lotes]
@@ -85,18 +85,18 @@ São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro 
 
 | Sistema | Quantidade | Função |
 |---|---:|---|
-| Relíquias comuns | 36 | Formam o baralho de 12 lotes; quatro peças de lore são garantidas |
-| Itens Proibidos | 7 | Candidatos à votação do meio da partida |
-| Infusões | 27 | Transformações duplas ou triplas |
+| Relíquias comuns | 42 | Formam o baralho de 12 lotes; quatro peças de lore são garantidas |
+| Itens Proibidos | 8 | Candidatos à votação do meio da partida; inclui FABIANA, A Criadora |
+| Infusões | 34 | Transformações duplas ou triplas |
 | Talentos | 27 | Progressão permanente em 5 ramos |
 | Intrigas Secretas | 8 | Objetivos de partida com recompensa de 4 ou 5 Prestígios |
-| Figuras da lore | 4 | Cajango, Dialgo, Feliciano e Dimas aparecem em itens, maldições e textos; não são personagens selecionáveis |
+| Figuras da lore | 29 | Todas aparecem em artefatos, infusões e conteúdo secreto; não são personagens selecionáveis |
 
-## Identidade do jogador e lore dos amigos
+## Identidade do jogador e Crônicas dos 29 Nomes
 
 O nome criado no cadastro é a identidade exibida na sala, no leilão, nas negociações e no placar. Não existe seleção de personagem nem vantagem ligada a Cajango, Dialgo, Feliciano ou Dimas.
 
-Esses quatro nomes pertencem ao mundo do jogo. Cada um possui duas relíquias próprias e ao menos uma maldição: Dialgo representa ocultismo e presságios; Feliciano, sorte e favores; Cajango, força destrutiva e defesa; Dimas, julgamento e autoridade. Osso Revestido de Dialgo, Baralho Marcado de Feliciano, Manopla Destruidora de Cajango e Martelo da Última Palavra de Dimas aparecem em toda partida, garantindo a presença da lore sem tomar a identidade dos jogadores.
+Os nomes da Crônica pertencem ao mundo do jogo e assinam relíquias, maldições, infusões, Itens Proibidos e Intrigas Secretas. Osso Revestido de Dialgo, Baralho Marcado de Feliciano, Manopla Destruidora de Cajango e Martelo da Última Palavra de Dimas aparecem em toda partida, garantindo uma base reconhecível. Roman, Galthak, Daniel Ramos, Haika Kimira, Giovana e Ana Clara possuem relíquias e infusões próprias. FABIANA, A Criadora é um Item Proibido de 9 Prestígios cujo poder concede 5 moedas, 5 Prestígios, proteção contra uma maldição e uma ativação adicional no ato.
 
 ## Intrigas Secretas
 
@@ -134,7 +134,7 @@ Decisões de equilíbrio:
 | Museu e poderes | Operacional | Limite de ativações calculado no motor e exibido na interface |
 | Negociação | Operacional | Oferta, contraproposta, venda, Prestígio e parceiros são sincronizados |
 | Infusões | Operacional | Componentes válidos, custos fixos e limite de uma por ato |
-| Votação proibida | Operacional | 7 candidatos, voto duplo do Oráculo e desempate aleatório |
+| Votação proibida | Operacional | 8 candidatos, voto duplo do Oráculo e desempate aleatório |
 | Intrigas e placar | Operacional | Progresso das 8 condições e bônus incluído no total final |
 | Progressão pós-partida | Operacional | Servidor concede 3 Lúmens uma única vez ao vencedor |
 
@@ -148,6 +148,8 @@ Os testes do projeto validam:
 - todos os poderes ligados a um tipo reconhecido pelo motor;
 - baralho com 12 lotes comuns e sem duplicatas;
 - presença garantida das quatro relíquias centrais da lore em cada baralho;
+- presença dos 29 nomes em artefatos, infusões e conteúdo secreto;
+- componentes válidos para as sete novas infusões e execução do poder de FABIANA;
 - progresso calculável para as oito Intrigas;
 - bônus da Intriga dentro da fórmula final;
 - privacidade da escolha entre clientes e revelação ao final;
