@@ -233,6 +233,41 @@ test("Presente Solar transfere a Maçã e a maldição econômica ao rival", () 
   assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.inventory.find((item) => item.id === apple.id)?.curse?.incomePenalty, 2);
 });
 
+test("Luva Contrabandista rouba moedas no sucesso sem inverter a transferência", () => {
+  const glove = structuredClone(RELICS.find((item) => item.id === "golden-thief-glove")!);
+  const actor = player("buyer", { gold: 10, inventory: [glove] });
+  const rival = player("rival", { gold: 10 });
+  const originalRandom = Math.random;
+  Math.random = () => 0.1;
+
+  try {
+    const result = executeRelicAction(game([actor, rival]), actor.id, glove.id, rival.id);
+    assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.gold, 12);
+    assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.gold, 8);
+    assert.match(result.log.at(-1) ?? "", /roubou 2 moedas/i);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test("Luva Contrabandista concede apenas Prestígio ao alvo quando falha", () => {
+  const glove = structuredClone(RELICS.find((item) => item.id === "golden-thief-glove")!);
+  const actor = player("buyer", { gold: 10, inventory: [glove] });
+  const rival = player("rival", { gold: 10 });
+  const originalRandom = Math.random;
+  Math.random = () => 0.99;
+
+  try {
+    const result = executeRelicAction(game([actor, rival]), actor.id, glove.id, rival.id);
+    assert.equal(result.players.find((candidate) => candidate.id === actor.id)?.gold, 10);
+    assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.gold, 10);
+    assert.equal(result.players.find((candidate) => candidate.id === rival.id)?.prestigeBonus, 1);
+    assert.match(result.log.at(-1) ?? "", /nenhuma moeda foi transferida/i);
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test("talentos da Glória ampliam o limite real de artefatos", () => {
   assert.equal(artifactLimit(player("buyer")), 2);
   assert.equal(artifactLimit(player("buyer", { skills: ["third-gallery-key"] })), 3);
