@@ -4,7 +4,7 @@ import WebSocket from "ws";
 
 const origin = process.env.TEST_ORIGIN || "http://127.0.0.1:3000";
 
-async function register(username, characterId, talent) {
+async function register(username, talent) {
   const response = await fetch(`${origin}/api/account`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -17,7 +17,7 @@ async function register(username, characterId, talent) {
   const patched = await fetch(`${origin}/api/account`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: JSON.stringify({ ...created.account, characterId, unlockedTalents: [talent], lumens: 0 }),
+    body: JSON.stringify({ ...created.account, unlockedTalents: [talent], lumens: 0 }),
   });
   assert.equal(patched.status, 200);
   return { cookie, profile: (await patched.json()).account };
@@ -58,9 +58,9 @@ function connect(cookie) {
 test("three real players can create, fill, ready and synchronize a room", async () => {
   const suffix = Date.now().toString(36).slice(-6);
   const accounts = await Promise.all([
-    register(`Host${suffix}`, "cajango", "patron-purse"),
-    register(`GuestA${suffix}`, "dialgo", "veiled-glimpse"),
-    register(`GuestB${suffix}`, "dimas", "radiant-seal"),
+    register(`Host${suffix}`, "patron-purse"),
+    register(`GuestA${suffix}`, "veiled-glimpse"),
+    register(`GuestB${suffix}`, "radiant-seal"),
   ]);
   const clients = accounts.map((account) => connect(account.cookie));
   await Promise.all(clients.map((client) => client.waitFor((message) => message.type === "hello")));
@@ -116,9 +116,8 @@ test("three real players can create, fill, ready and synchronize a room", async 
 
 test("a four-player room only starts after all four guests are ready", async () => {
   const suffix = `q${Date.now().toString(36).slice(-6)}`;
-  const characters = ["cajango", "feliciano", "dialgo", "dimas"];
   const talents = ["patron-purse", "silver-tongue", "veiled-glimpse", "radiant-seal"];
-  const accounts = await Promise.all(Array.from({ length: 4 }, (_, index) => register(`Four${index}${suffix}`, characters[index], talents[index])));
+  const accounts = await Promise.all(Array.from({ length: 4 }, (_, index) => register(`Four${index}${suffix}`, talents[index])));
   const clients = accounts.map((account) => connect(account.cookie));
   await Promise.all(clients.map((client) => client.waitFor((message) => message.type === "hello")));
   clients[0].socket.send(JSON.stringify({ type: "room:create", name: `Quarteto ${suffix}`, maxPlayers: 4 }));

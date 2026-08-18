@@ -631,7 +631,10 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 
 .talent-node:last-child { margin-bottom: 0; }
 .talent-node:hover:not(:disabled) { border-color: var(--branch-color); transform: translateY(-2px); }
-.talent-node.locked { filter: grayscale(.7); opacity: .58; }
+.talent-node.locked { filter: none; opacity: .82; border-color: rgba(185,149,75,.22); background: linear-gradient(145deg, rgba(27,23,21,.96), rgba(9,8,8,.96)); }
+.talent-node:disabled { filter: none; opacity: .82; }
+.talent-node.available { border-color: color-mix(in srgb, var(--branch-color) 58%, transparent); background: linear-gradient(145deg, var(--branch-glow), rgba(10,8,8,.97) 64%); box-shadow: inset 0 0 24px var(--branch-glow); }
+.talent-node.available:hover { box-shadow: inset 0 0 34px var(--branch-glow), 0 0 18px var(--branch-glow); }
 .talent-node.equipped { border-color: var(--branch-color); box-shadow: inset 0 0 30px var(--branch-glow), 0 0 20px rgba(0,0,0,.25); }
 .talent-node.equipped::after { content: "✓"; position: absolute; top: 7px; right: 8px; color: var(--branch-color); font-size: .7rem; }
 
@@ -649,9 +652,9 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 }
 
 .talent-info { grid-area: info; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.talent-info strong { color: #d9ccb0; font-size: .8rem; font-weight: 400; }
-.talent-info small { color: #766e60; font-size: .62rem; line-height: 1.45; }
-.talent-cost { grid-area: cost; justify-self: end; color: var(--branch-color); font-size: .55rem; letter-spacing: .1em; text-transform: uppercase; }
+.talent-info strong { color: #eadfc7; font-size: .8rem; font-weight: 500; text-shadow: 0 1px 8px rgba(0,0,0,.65); }
+.talent-info small { color: #b0a590; font-size: .62rem; line-height: 1.5; }
+.talent-cost { grid-area: cost; justify-self: end; color: color-mix(in srgb, var(--branch-color) 82%, #f3e4b2); font-size: .55rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 
 .talent-footer {
   display: flex;

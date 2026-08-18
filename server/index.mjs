@@ -18,7 +18,6 @@ const temporaryStorePath = path.join(dataDirectory, "store.tmp");
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 const SESSION_COOKIE = "midnight_session";
 const ROOM_TTL = 1000 * 60 * 60 * 8;
-const CHARACTER_IDS = new Set(["cajango", "feliciano", "dialgo", "dimas"]);
 const INTRIGUE_IDS = new Set(["blue-blood", "dead-merchant", "bloodied-hands", "forbidden-devotee", "cursed-museum", "last-bettor", "obsessive-collector", "court-conspirator"]);
 
 class JsonStore {
@@ -111,7 +110,6 @@ function publicProfile(user) {
   return {
     id: user.id,
     username: user.username,
-    characterId: user.characterId ?? null,
     lumens: user.lumens ?? 0,
     unlockedTalents: user.unlockedTalents ?? [],
     wins: user.wins ?? 0,
@@ -180,7 +178,6 @@ function roomSnapshot(room, viewerId) {
       return {
         userId: member.userId,
         username: user?.username ?? "Convidado",
-        characterId: user?.characterId ?? null,
         skills: user?.unlockedTalents ?? [],
         wins: user?.wins ?? 0,
         ready: member.ready,
@@ -343,7 +340,6 @@ app.post("/api/account", async (request, response) => {
       usernameKey,
       passwordHash: passwordRecord.hash,
       passwordSalt: passwordRecord.salt,
-      characterId: null,
       lumens: 0,
       unlockedTalents: [],
       wins: 0,
@@ -366,9 +362,6 @@ app.post("/api/account", async (request, response) => {
 app.patch("/api/account", async (request, response) => {
   const user = requestUser(request);
   if (!user) return response.status(401).json({ error: "Entre novamente no registro." });
-  const characterId = request.body?.characterId;
-  if (characterId && !CHARACTER_IDS.has(characterId)) return response.status(400).json({ error: "Máscara inválida." });
-  if (characterId && !user.characterId) user.characterId = characterId;
   const talents = Array.isArray(request.body?.unlockedTalents) ? request.body.unlockedTalents.filter((item) => typeof item === "string").slice(0, 30) : user.unlockedTalents;
   const newlyUnlocked = talents.filter((talent) => !user.unlockedTalents.includes(talent));
   const requestedLumens = Number(request.body?.lumens);
@@ -420,7 +413,7 @@ webSocketServer.on("connection", (socket, _request, user) => {
           if (oldRoom.members.length === 0) store.data.rooms = store.data.rooms.filter((room) => room.id !== oldRoom.id);
           else broadcastRoom(oldRoom);
         }
-        if (!user.characterId || user.unlockedTalents.length === 0) return sendError(socket, "Escolha sua máscara e seu primeiro talento antes de criar uma sala.");
+        if (user.unlockedTalents.length === 0) return sendError(socket, "Escolha seu primeiro talento antes de criar uma sala.");
         const maxPlayers = Number(message.maxPlayers) === 3 ? 3 : 4;
         const room = {
           id: randomUUID(), code: roomCode(), name: normalizeRoomName(message.name, user.username), hostUserId: user.id,
@@ -434,7 +427,7 @@ webSocketServer.on("connection", (socket, _request, user) => {
       }
 
       if (message.type === "room:join") {
-        if (!user.characterId || user.unlockedTalents.length === 0) return sendError(socket, "Escolha sua máscara e seu primeiro talento antes de entrar.");
+        if (user.unlockedTalents.length === 0) return sendError(socket, "Escolha seu primeiro talento antes de entrar.");
         const room = store.data.rooms.find((candidate) => candidate.id === message.roomId || candidate.code === String(message.code ?? "").toUpperCase());
         if (!room || room.status !== "waiting") return sendError(socket, "Esta sala não está mais aceitando convidados.", "ROOM_UNAVAILABLE");
         if (room.members.length >= room.maxPlayers) return sendError(socket, "A mesa já está completa.", "ROOM_FULL");

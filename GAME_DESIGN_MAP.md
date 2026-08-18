@@ -18,7 +18,7 @@ Pilares:
 
 ```mermaid
 flowchart TD
-  A[Conta e máscara permanente] --> B[Árvore do Patronato]
+  A[Conta com nome do jogador] --> B[Árvore do Patronato]
   B --> C[Lobby público]
   C --> D[Sala de 3 ou 4 jogadores]
   D --> E[Cada jogador recebe 3 Intrigas]
@@ -85,12 +85,18 @@ São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro 
 
 | Sistema | Quantidade | Função |
 |---|---:|---|
-| Relíquias comuns | 28 | Formam o baralho de 12 lotes |
+| Relíquias comuns | 36 | Formam o baralho de 12 lotes; quatro peças de lore são garantidas |
 | Itens Proibidos | 7 | Candidatos à votação do meio da partida |
 | Infusões | 27 | Transformações duplas ou triplas |
 | Talentos | 27 | Progressão permanente em 5 ramos |
 | Intrigas Secretas | 8 | Objetivos de partida com recompensa de 4 ou 5 Prestígios |
-| Personagens | 4 | Identidade visual permanente, sem passiva própria |
+| Figuras da lore | 4 | Cajango, Dialgo, Feliciano e Dimas aparecem em itens, maldições e textos; não são personagens selecionáveis |
+
+## Identidade do jogador e lore dos amigos
+
+O nome criado no cadastro é a identidade exibida na sala, no leilão, nas negociações e no placar. Não existe seleção de personagem nem vantagem ligada a Cajango, Dialgo, Feliciano ou Dimas.
+
+Esses quatro nomes pertencem ao mundo do jogo. Cada um possui duas relíquias próprias e ao menos uma maldição: Dialgo representa ocultismo e presságios; Feliciano, sorte e favores; Cajango, força destrutiva e defesa; Dimas, julgamento e autoridade. Osso Revestido de Dialgo, Baralho Marcado de Feliciano, Manopla Destruidora de Cajango e Martelo da Última Palavra de Dimas aparecem em toda partida, garantindo a presença da lore sem tomar a identidade dos jogadores.
 
 ## Intrigas Secretas
 
@@ -119,7 +125,7 @@ Decisões de equilíbrio:
 
 | Sistema | Estado | Verificação |
 |---|---|---|
-| Conta, máscara e talentos permanentes | Operacional | API persiste conta, personagem, Lúmens e talentos |
+| Conta, nome e talentos permanentes | Operacional | API persiste nome de jogador, Lúmens e talentos; não exige personagem fixo |
 | Lobby e salas | Operacional | Testes com 3 e 4 conexões reais |
 | Sincronização da partida | Operacional | Controle de versão e reconexão por WebSocket |
 | Privacidade das Intrigas | Operacional | Servidor personaliza o estado por jogador e revela apenas no final |
@@ -141,6 +147,7 @@ Os testes do projeto validam:
 - todas as receitas com componentes existentes e custos corretos;
 - todos os poderes ligados a um tipo reconhecido pelo motor;
 - baralho com 12 lotes comuns e sem duplicatas;
+- presença garantida das quatro relíquias centrais da lore em cada baralho;
 - progresso calculável para as oito Intrigas;
 - bônus da Intriga dentro da fórmula final;
 - privacidade da escolha entre clientes e revelação ao final;

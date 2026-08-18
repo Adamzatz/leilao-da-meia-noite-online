@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
 type Tag = "Realeza" | "Desejo" | "Guerra" | "Morte" | "Oculto" | "Fé" | "Traição" | "Riqueza";
-type CharacterId = "cajango" | "feliciano" | "dialgo" | "dimas";
 type Branch = "Fortuna" | "Visão" | "Glória" | "Intriga" | "Maldição";
 type GameStatus = "intrigue" | "announcement" | "bidding" | "awarded" | "actBreak" | "legendVote" | "voteResult" | "intrigueReveal";
 type TargetKind = true | "player" | "rivalRelic" | "ownRelic" | "deckRelic";
 type ActionType = "tax" | "discount" | "stealGold" | "silence" | "gainGold" | "convert" | "ward" | "reflect" | "stealPrestige" | "mission" | "giftCurse" | "exalt" | "grandDiscount" | "shield" | "royalDecree" | "tradeMark" | "siphon" | "coinFlip" | "judgment" | "oracle" | "riskBoost" | "recharge" | "purify" | "tradeBoost" | "fusion";
 
-type Character = { id: CharacterId; name: string; title: string; sigil: string; };
+type Character = { id: string; name: string; title: string; sigil: string; };
 export type Talent = { id: string; name: string; icon: string; branch: Branch; tier: number; cost: number; parent?: string; description: string; activeType?: "blackVault" | "prioritySeal" | "exhibit" | "bribe" | "purify"; };
 export type Intrigue = { id: string; name: string; icon: string; description: string; reward: number; target: number; metric: "royalRelics" | "sales" | "hostileActions" | "legendaryRelics" | "curses" | "lowGold" | "collection" | "tradePartners"; };
 type ActivePower = { name: string; description: string; type: ActionType; once: "act" | "game"; target?: TargetKind; value?: number; chance?: number; };
@@ -56,14 +55,14 @@ type Auction = { relic: Relic; currentBid: number; highBidder: string | null; ac
 type Award = { winnerId: string | null; price: number; message: string; };
 type Score = { playerId: string; relics: number; talents: number; infusions: number; gold: number; curses: number; intrigue: number; intrigueId: string | null; total: number; fusionNames: string[]; };
 type VoteOutcome = { winnerId: string; counts: Record<string, number>; };
-type Profile = { id: string; username: string; characterId: CharacterId | null; lumens: number; unlockedTalents: string[]; wins: number; };
+type Profile = { id: string; username: string; lumens: number; unlockedTalents: string[]; wins: number; };
 type TradeOffer = { buyerId: string; sellerId: string; relicId: string; amount: number; message: string; };
 type LobbyRoom = { id: string; code: string; name: string; hostName: string; maxPlayers: 3 | 4; playerCount: number; status: "waiting" | "playing"; createdAt: number; };
-type RoomMember = { userId: string; username: string; characterId: CharacterId | null; skills: string[]; wins: number; ready: boolean; seat: number; online: boolean; isHost: boolean; };
+type RoomMember = { userId: string; username: string; skills: string[]; wins: number; ready: boolean; seat: number; online: boolean; isHost: boolean; };
 type OnlineRoom = { id: string; code: string; name: string; hostUserId: string; maxPlayers: 3 | 4; status: "waiting" | "playing" | "finished"; version: number; viewerId: string; gameState: GameState | null; members: RoomMember[]; };
 
 export type GameState = {
-  phase: "intro" | "library" | "select" | "talents" | "lobby" | "room" | "playing" | "results";
+  phase: "intro" | "library" | "talents" | "lobby" | "room" | "playing" | "results";
   players: Player[];
   deck: Relic[];
   lotIndex: number;
@@ -79,12 +78,12 @@ export type GameState = {
   rewardGranted: boolean;
 };
 
-const CHARACTERS: Character[] = [
-  { id: "cajango", name: "Cajango", title: "O Apostador Escarlate", sigil: "♠" },
-  { id: "feliciano", name: "Feliciano", title: "O Favorito da Corte", sigil: "♛" },
-  { id: "dialgo", name: "Dialgo", title: "O Olho Velado", sigil: "◈" },
-  { id: "dimas", name: "Dimas", title: "A Última Palavra", sigil: "♜" },
-];
+const PLAYER_SIGILS = ["♠", "♛", "◈", "♜"];
+const FRIEND_LORE_IDS = ["dialgo-coated-bone", "feliciano-marked-deck", "cajango-destroyer-gauntlet", "dimas-last-word-hammer"];
+
+function playerIdentity(userId: string, username: string, seat: number): Character {
+  return { id: userId, name: username, title: "Convidado da Meia-Noite", sigil: PLAYER_SIGILS[seat % PLAYER_SIGILS.length] };
+}
 
 const ROOT_TALENTS = ["patron-purse", "veiled-glimpse", "radiant-seal", "silver-tongue", "salt-seal"];
 
@@ -162,6 +161,14 @@ export const RELICS: Relic[] = [
   { id: "golden-thief-glove", name: "Luva do Ladrão Áureo", epithet: "Feita sob medida para mãos que não existem", icon: "☞", prestige: 2, start: 2, tags: ["Riqueza", "Traição"], lore: "Os dedos apontam sozinhos para a bolsa mais cheia.", power: { name: "Mão Leve", description: "70% de roubar 2 moedas; na falha, o alvo ganha 1 Prestígio.", type: "stealGold", once: "act", target: true, value: 2, chance: .7 } },
   { id: "broken-chain-rosary", name: "Rosário das Correntes Partidas", epithet: "Cada conta absolve um cárcere", icon: "☩", prestige: 3, start: 2, tags: ["Fé", "Traição"], lore: "A última oração termina com uma fechadura aberta.", power: { name: "Libertação", description: "Purifique permanentemente uma maldição do seu Museu.", type: "purify", once: "game", target: "ownRelic" } },
   { id: "duke-sealed-letter", name: "Carta Selada do Duque", epithet: "Um contrato que oferece duas verdades", icon: "✉", prestige: 2, start: 1, tags: ["Realeza", "Traição"], lore: "O destinatário muda toda vez que o lacre se rompe.", power: { name: "Cláusula Oculta", description: "Prepare dois favores: recupere até 4 moedas na próxima compra e ganhe +2 Prestígios na próxima venda.", type: "tradeBoost", once: "act" } },
+  { id: "dialgo-coated-bone", name: "Osso Revestido de Dialgo", epithet: "Marfim negro banhado no verniz de um sonho ruim", icon: "⌁", prestige: 3, start: 2, tags: ["Morte", "Oculto"], cursed: true, curse: { name: "Sussurro de Dialgo", description: "As vozes do osso reduzem sua renda em 1 moeda a cada ato.", incomePenalty: 1 }, lore: "Dialgo jurava que o osso respondia. O salão descobriu tarde demais que era verdade.", power: { name: "Ritual do Segundo Pulso", description: "Recarregue um artefato utilizado neste ato.", type: "recharge", once: "game", target: "ownRelic" } },
+  { id: "dialgo-sealed-eye", name: "Olho Lacrado de Dialgo", epithet: "Uma pupila de vidro que antecipa o próximo martelo", icon: "◉", prestige: 2, start: 2, tags: ["Oculto", "Fé"], cursed: true, curse: { name: "Visão que Cobra", description: "Enquanto a visão estiver ativa, esta peça vale −1 Prestígio.", penalty: 1 }, lore: "Dialgo cobriu o olho para esquecer o futuro; alguém removeu o lacre.", power: { name: "Presságio de Dialgo", description: "Veja os próximos lotes e escolha qual aparecerá primeiro.", type: "oracle", once: "game", target: "deckRelic" } },
+  { id: "feliciano-marked-deck", name: "Baralho Marcado de Feliciano", epithet: "Quatro ases, nenhum inocente", icon: "⚄", prestige: 2, start: 1, tags: ["Riqueza", "Traição"], cursed: true, curse: { name: "Sorte de Feliciano", description: "A sorte cobra sua parte: esta peça vale −1 Prestígio enquanto ativa.", penalty: 1 }, lore: "Feliciano dizia jogar limpo. As cartas nunca tiveram coragem de desmenti-lo.", power: { name: "Tudo ou Nada", description: "50% de receber 5 moedas; na falha, perca 3.", type: "coinFlip", once: "act" } },
+  { id: "feliciano-favor-cloak", name: "Manto do Favor de Feliciano", epithet: "Veludo que sempre encontra a cadeira vencedora", icon: "❦", prestige: 3, start: 3, tags: ["Realeza", "Riqueza"], lore: "Quando Feliciano entrava no salão, até o azar fingia não reconhecê-lo.", power: { name: "Favor Improvável", description: "Anule a maldição da próxima relíquia amaldiçoada que você adquirir.", type: "ward", once: "game" } },
+  { id: "cajango-destroyer-gauntlet", name: "Manopla Destruidora de Cajango", epithet: "Ferro de cerco moldado para uma única mão", icon: "☞", prestige: 4, start: 4, tags: ["Guerra", "Traição"], cursed: true, curse: { name: "Fúria de Cajango", description: "A manopla exige violência e vale −2 Prestígios enquanto ativa.", penalty: 2 }, lore: "Cajango nunca bateu duas vezes na mesma porta. Depois da primeira, não restava porta.", power: { name: "Golpe de Cobrança", description: "65% de roubar 4 moedas de um rival; na falha, pague 2.", type: "stealGold", once: "act", target: true, value: 4, chance: .65 } },
+  { id: "cajango-ash-breastplate", name: "Peitoral de Cinzas de Cajango", epithet: "Uma couraça temperada no incêndio da ala leste", icon: "♝", prestige: 3, start: 3, tags: ["Guerra", "Morte"], cursed: true, curse: { name: "Peso das Cinzas", description: "A couraça reduz sua renda em 1 moeda a cada ato.", incomePenalty: 1 }, lore: "Cajango saiu do fogo sorrindo. A armadura guardou o resto daquele sorriso.", power: { name: "Postura Inquebrável", description: "Anule o próximo poder direcionado contra seu Museu.", type: "shield", once: "act" } },
+  { id: "dimas-last-word-hammer", name: "Martelo da Última Palavra de Dimas", epithet: "Depois da batida, toda discussão parece encerrada", icon: "♜", prestige: 3, start: 3, tags: ["Guerra", "Realeza"], cursed: true, curse: { name: "Silêncio de Dimas", description: "O veredito pesa sobre o dono e custa −1 Prestígio.", penalty: 1 }, lore: "Dimas não levantava a voz. Levantava o martelo.", power: { name: "Veredito de Dimas", description: "Se o rival tiver 4 ou mais moedas, roube 2; caso contrário, roube 1 Prestígio.", type: "judgment", once: "act", target: true } },
+  { id: "dimas-verdict-signet", name: "Sinete do Veredito de Dimas", epithet: "Cera negra para ordens que ninguém ousa devolver", icon: "⚜", prestige: 3, start: 2, tags: ["Realeza", "Fé"], lore: "O nome de Dimas no lacre valia mais que a assinatura de qualquer rei.", power: { name: "Ordem Irrecorrível", description: "O próximo lote começa 2 moedas mais caro; se um rival vencer, você recebe 2 moedas.", type: "royalDecree", once: "act" } },
 ];
 
 export const LEGENDARY_RELICS: Relic[] = [
@@ -212,10 +219,10 @@ export const FUSION_RECIPES: FusionRecipe[] = [
 const COMBOS: { name: string; ids: string[]; points: number }[] = [];
 
 const ACT_TEXTS = [
-  "As portas são trancadas. O Anfitrião promete que nenhum convidado deixará o salão igual.",
-  "A orquestra toca ao contrário e a corte recompõe suas fortunas.",
-  "Os Itens Proibidos foram escolhidos. As velas agora queimam em azul.",
-  "Soa a última badalada. Depois destes lotes, apenas o Prestígio decidirá o Soberano.",
+  "As portas são trancadas. Dialgo escuta os ossos, Feliciano embaralha o destino, Cajango fecha o punho e Dimas observa em silêncio.",
+  "A orquestra toca ao contrário. Dizem que Feliciano apostou no impossível e que Dialgo já conhece o resultado.",
+  "Os Itens Proibidos foram escolhidos. Cajango quer quebrar o lacre; Dimas exige que a votação seja cumprida.",
+  "Soa a última badalada. As histórias de Dialgo, Feliciano, Cajango e Dimas agora pertencem aos Museus da corte.",
 ];
 
 const EMPTY_GAME: GameState = { phase: "intro", players: [], deck: [], lotIndex: 0, act: 1, status: "announcement", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
@@ -238,8 +245,11 @@ export function createDeck(): Relic[] {
   const regularTriples = FUSION_RECIPES.filter((recipe) => recipe.tier === 3 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const regularDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const recipes = [...shuffle(regularTriples).slice(0, 1), ...shuffle(regularDuos).slice(0, 2)];
-  const required = new Set([...recipes.flatMap((recipe) => recipe.components), "hollow-legion-banner", "last-decree-scepter", "oracle-glass-eye"]);
-  const guaranteed = RELICS.filter((relic) => required.has(relic.id)).slice(0, 10);
+  const required = new Set([...FRIEND_LORE_IDS, ...recipes.flatMap((recipe) => recipe.components)]);
+  const guaranteed = [
+    ...FRIEND_LORE_IDS.map((id) => RELICS.find((relic) => relic.id === id)!),
+    ...RELICS.filter((relic) => required.has(relic.id) && !FRIEND_LORE_IDS.includes(relic.id)),
+  ];
   const fillers = shuffle(RELICS.filter((relic) => !required.has(relic.id))).slice(0, 12 - guaranteed.length);
   const deck = shuffle([...guaranteed, ...fillers]);
   const disposable = deck.findIndex((relic) => !required.has(relic.id));
@@ -710,7 +720,6 @@ function distributeIncome(game: GameState, nextIndex: number): GameState {
 
 export default function Home() {
   const [game, setGame] = useState<GameState>(EMPTY_GAME);
-  const [selectedCharacter, setSelectedCharacter] = useState<CharacterId>("cajango");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [lobbyRooms, setLobbyRooms] = useState<LobbyRoom[]>([]);
@@ -928,13 +937,13 @@ export default function Home() {
   };
 
   const startOnlineGame = () => {
-    if (!profile?.characterId || !onlineRoom || onlineRoom.hostUserId !== profile.id) return;
+    if (!profile || !onlineRoom || onlineRoom.hostUserId !== profile.id) return;
     const players = onlineRoom.members.map((member, index): Player => {
-      const character = CHARACTERS.find((candidate) => candidate.id === member.characterId) ?? CHARACTERS[index % CHARACTERS.length];
+      const character = playerIdentity(member.userId, member.username, index);
       const skills = member.skills;
       return { id: member.userId, userId: member.userId, username: member.username, character, isHuman: member.userId === profile.id, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0, intrigueOptions: shuffle(INTRIGUES).slice(0, 3).map((intrigue) => intrigue.id), intrigueId: null, intrigueChosen: false, relicsSold: 0, hostileActions: 0, tradePartners: [] };
     });
-    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createDeck(), status: "intrigue", log: ["As Intrigas Secretas foram entregues. O primeiro lote aguarda todos selarem seus objetivos."] };
+    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createDeck(), status: "intrigue", log: ["Dialgo, Feliciano, Cajango e Dimas deixaram suas relíquias no salão. As Intrigas Secretas foram entregues."] };
     sendSocket({ type: "room:start", gameState: initialGame });
     playTone("click");
   };
@@ -1087,20 +1096,9 @@ export default function Home() {
 
   if (!profile) return <AuthScreen onAuthenticated={(account) => { setProfile(account); setGame(EMPTY_GAME); }} />;
 
-  if (game.phase === "intro") return <Intro profile={profile} onEnter={() => setGame((current) => ({ ...current, phase: !profile.characterId ? "select" : profile.unlockedTalents.length === 0 ? "talents" : "lobby" }))} onLibrary={() => setGame((current) => ({ ...current, phase: "library" }))} onTalents={() => setGame((current) => ({ ...current, phase: profile.characterId ? "talents" : "select" }))} onRules={() => setRulesOpen(true)} onLogout={logout} rulesOpen={rulesOpen} closeRules={() => setRulesOpen(false)} />;
+  if (game.phase === "intro") return <Intro profile={profile} onEnter={() => setGame((current) => ({ ...current, phase: profile.unlockedTalents.length === 0 ? "talents" : "lobby" }))} onLibrary={() => setGame((current) => ({ ...current, phase: "library" }))} onTalents={() => setGame((current) => ({ ...current, phase: "talents" }))} onRules={() => setRulesOpen(true)} onLogout={logout} rulesOpen={rulesOpen} closeRules={() => setRulesOpen(false)} />;
 
   if (game.phase === "library") return <LibraryScreen onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} />;
-
-  if (game.phase === "select") return (
-    <main className="selection-screen">
-      <SimpleHeader onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} right={<span className="lumen-pill">✦ {profile.lumens} Lúmens</span>} />
-      <section className="selection-content"><p className="eyebrow">Escolha a sua identidade</p><h1>Quem atravessará as portas?</h1><p className="selection-copy">A escolha é visual. Sua estratégia será criada na Árvore do Patronato antes do baile.</p>
-        <div className="character-grid">{CHARACTERS.map((character) => <button key={character.id} className={`character-choice ${selectedCharacter === character.id ? "selected" : ""}`} onClick={() => setSelectedCharacter(character.id)}><span className="choice-sigil">{character.sigil}</span><span className="choice-name">{character.name}</span><span className="choice-title">{character.title}</span><span className="identity-note">Sem vantagem própria · sua build define o estilo</span></button>)}</div>
-        <p className="permanent-choice">Esta máscara ficará ligada para sempre a <strong>{profile.username}</strong>.</p>
-        <button className="primary-button large" onClick={() => { persistProfile({ ...profile, characterId: selectedCharacter }); setGame((current) => ({ ...current, phase: "talents" })); }}>Assumir esta máscara</button>
-      </section>
-    </main>
-  );
 
   if (game.phase === "lobby") return <LobbyScreen profile={profile} rooms={lobbyRooms} connectionState={connectionState} message={onlineMessage} onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} onTalents={() => setGame((current) => ({ ...current, phase: "talents" }))} onCreate={(name, maxPlayers) => { setOnlineMessage(""); sendSocket({ type: "room:create", name, maxPlayers }); }} onJoin={(roomId) => { setOnlineMessage(""); sendSocket({ type: "room:join", roomId }); }} onJoinCode={(code) => { setOnlineMessage(""); sendSocket({ type: "room:join", code }); }} />;
 
@@ -1110,7 +1108,7 @@ export default function Home() {
     <main className="talent-screen">
       <SimpleHeader onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} right={<span className="lumen-pill bright">✦ {profile.lumens} Lúmens</span>} />
       <section className="talent-content"><div className="talent-heading"><div><p className="eyebrow">Árvore do Patronato</p><h1>Construa seu leiloeiro</h1><p>Todo talento comprado fica ativo para sempre. Alguns liberam ações que você usa durante o baile.</p></div><div className="loadout-counter"><strong>{profile.unlockedTalents.length}</strong><span>talentos dominados</span></div></div>
-        <div className="talent-tree">{(["Fortuna", "Visão", "Glória", "Intriga", "Maldição"] as Branch[]).map((branch) => <section className={`talent-branch branch-${branch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`} key={branch}><header><span>{branch === "Fortuna" ? "●" : branch === "Visão" ? "◈" : branch === "Glória" ? "♛" : branch === "Intriga" ? "❦" : "☠"}</span><h2>{branch}</h2></header><div className="branch-line" />{TALENTS.filter((talent) => talent.branch === branch).map((talent) => { const owned = profile.unlockedTalents.includes(talent.id); const parentReady = !talent.parent || profile.unlockedTalents.includes(talent.parent); const firstFree = profile.unlockedTalents.length === 0 && ROOT_TALENTS.includes(talent.id); const cost = firstFree ? 0 : talent.cost; return <button className={`talent-node tier-${talent.tier} ${owned ? "owned" : "locked"} ${talent.activeType ? "active-talent" : ""}`} key={talent.id} onClick={() => toggleTalent(talent)} disabled={owned || (!firstFree && (!parentReady || profile.lumens < cost))}><span className="talent-icon">{talent.icon}</span><span className="talent-info"><strong>{talent.name}{talent.activeType ? " · ATIVA" : ""}</strong><small>{talent.description}</small></span><span className="talent-cost">{owned ? "Dominado" : firstFree ? "Primeiro talento · grátis" : parentReady ? `${cost} ✦` : "Exige o anterior"}</span></button>; })}</section>)}</div>
+        <div className="talent-tree">{(["Fortuna", "Visão", "Glória", "Intriga", "Maldição"] as Branch[]).map((branch) => <section className={`talent-branch branch-${branch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`} key={branch}><header><span>{branch === "Fortuna" ? "●" : branch === "Visão" ? "◈" : branch === "Glória" ? "♛" : branch === "Intriga" ? "❦" : "☠"}</span><h2>{branch}</h2></header><div className="branch-line" />{TALENTS.filter((talent) => talent.branch === branch).map((talent) => { const owned = profile.unlockedTalents.includes(talent.id); const parentReady = !talent.parent || profile.unlockedTalents.includes(talent.parent); const firstFree = profile.unlockedTalents.length === 0 && ROOT_TALENTS.includes(talent.id); const cost = firstFree ? 0 : talent.cost; const purchasable = firstFree || (parentReady && profile.lumens >= cost); return <button className={`talent-node tier-${talent.tier} ${owned ? "owned" : purchasable ? "available" : "locked"} ${talent.activeType ? "active-talent" : ""}`} key={talent.id} onClick={() => toggleTalent(talent)} disabled={owned || (!firstFree && (!parentReady || profile.lumens < cost))}><span className="talent-icon">{talent.icon}</span><span className="talent-info"><strong>{talent.name}{talent.activeType ? " · ATIVA" : ""}</strong><small>{talent.description}</small></span><span className="talent-cost">{owned ? "Dominado" : firstFree ? "Primeiro talento · grátis" : parentReady ? `${cost} ✦` : "Exige o anterior"}</span></button>; })}</section>)}</div>
         <div className="talent-footer"><div><strong>Lúmens</strong><span>Você começa com um talento grátis. Cada vitória rende 3 Lúmens para expandir esta build permanente.</span></div><button className="primary-button" disabled={profile.unlockedTalents.length === 0} onClick={enterLobby}>Ver salas online</button></div>
       </section>
     </main>
@@ -1174,13 +1172,12 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (profile: Profile) =
     finally { setBusy(false); }
   };
 
-  return <main className="auth-screen"><div className="ambient-glow" /><section className="auth-card"><div className="auth-sigil">♛</div><p className="eyebrow">Registro do baile online</p><h1>Leilão da Meia-Noite</h1><p className="auth-copy">Sua máscara, seus Lúmens e sua árvore ficam guardados para jogar de qualquer computador.</p><div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Entrar</button><button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Cadastrar</button></div><form onSubmit={submit}><label>Nome<input autoComplete="username" minLength={3} maxLength={20} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Seu nome no baile" required /></label><label>Senha<input type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={4} maxLength={80} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Sua palavra secreta" required /></label>{error && <p className="auth-error">{error}</p>}<button className="primary-button full" disabled={busy}>{busy ? "Selando…" : mode === "login" ? "Entrar no registro" : "Criar minha conta"}</button></form><small className="local-note">Sessão protegida · lobby e partidas sincronizados em tempo real.</small></section></main>;
+  return <main className="auth-screen"><div className="ambient-glow" /><section className="auth-card"><div className="auth-sigil">♛</div><p className="eyebrow">Registro do baile online</p><h1>Leilão da Meia-Noite</h1><p className="auth-copy">Seu nome de jogador, seus Lúmens e sua árvore ficam guardados para jogar de qualquer computador.</p><div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }}>Entrar</button><button className={mode === "register" ? "active" : ""} onClick={() => { setMode("register"); setError(""); }}>Cadastrar</button></div><form onSubmit={submit}><label>Nome do jogador<input autoComplete="username" minLength={3} maxLength={20} value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Como seus amigos verão você" required /></label><label>Senha<input type="password" autoComplete={mode === "register" ? "new-password" : "current-password"} minLength={4} maxLength={80} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Sua palavra secreta" required /></label>{error && <p className="auth-error">{error}</p>}<button className="primary-button full" disabled={busy}>{busy ? "Selando…" : mode === "login" ? "Entrar no registro" : "Criar minha conta"}</button></form><small className="local-note">Este nome será sua identidade nas salas e partidas.</small></section></main>;
 }
 
 function Intro({ profile, onEnter, onLibrary, onTalents, onRules, onLogout, rulesOpen, closeRules }: { profile: Profile; onEnter: () => void; onLibrary: () => void; onTalents: () => void; onRules: () => void; onLogout: () => void; rulesOpen: boolean; closeRules: () => void; }) {
-  const character = CHARACTERS.find((item) => item.id === profile.characterId);
-  const playLabel = character && profile.unlockedTalents.length > 0 ? "Entrar no salão online" : character ? "Escolher primeiro talento" : "Escolher minha máscara";
-  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para três ou quatro convidados. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span><span><b>{INTRIGUES.length}</b> intrigas</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header>{character ? <div className="menu-character"><span>{character.sigil}</span><div><small>Sua máscara permanente</small><strong>{character.name}</strong><p>{character.title}</p></div></div> : <div className="menu-character unbound"><span>◇</span><div><small>Identidade ainda velada</small><strong>Escolha sua máscara</strong><p>A aparência é permanente; a árvore define sua estratégia.</p></div></div>}<button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer · 3 ou 4 pessoas</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e intrigas</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar ou entrar numa mesa</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
+  const playLabel = profile.unlockedTalents.length > 0 ? "Entrar no salão online" : "Escolher primeiro talento";
+  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para três ou quatro convidados. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span><span><b>{INTRIGUES.length}</b> intrigas</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header><div className="menu-character"><span>{profile.username.slice(0, 1).toLocaleUpperCase("pt-BR")}</span><div><small>Sua identidade de jogador</small><strong>{profile.username}</strong><p>Os talentos definem seu estilo; os nomes da lore vivem nas relíquias.</p></div></div><button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer · 3 ou 4 pessoas</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e intrigas</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar ou entrar numa mesa</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
 }
 
 function LibraryScreen({ onBack }: { onBack: () => void; }) {
@@ -1219,7 +1216,7 @@ function WaitingRoom({ room, profile, connectionState, message, onLeave, onReady
   const full = room.members.length === room.maxPlayers;
   const allReady = full && room.members.every((member) => member.ready);
   const isHost = room.hostUserId === profile.id;
-  return <main className="waiting-screen"><div className="ambient-glow" /><SimpleHeader onBack={onLeave} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Conectado" : "○ Reconectando"}</span>} /><section className="waiting-card"><p className="eyebrow">Antessala privada</p><h1>{room.name}</h1><div className="room-code-display"><span>Código para os amigos</span><strong>{room.code}</strong><button onClick={() => void navigator.clipboard?.writeText(room.code)}>Copiar</button></div>{message && <div className="online-notice">{message}</div>}<div className={`waiting-seats seats-${room.maxPlayers}`}>{Array.from({ length: room.maxPlayers }, (_, seat) => { const member = room.members[seat]; const character = CHARACTERS.find((item) => item.id === member?.characterId); return member ? <article className={`waiting-seat ${member.ready ? "ready" : ""} ${member.online ? "online" : "offline"}`} key={member.userId}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">{character?.sigil ?? "◇"}</div><h2>{member.username}{member.userId === profile.id ? " · você" : ""}</h2><p>{character?.name ?? "Máscara velada"}</p><div className="seat-badges">{member.isHost && <b>ANFITRIÃO</b>}<b>{member.online ? "ONLINE" : "RECONECTANDO"}</b></div><strong className="ready-state">{member.ready ? "✓ PRONTO" : "AGUARDANDO"}</strong></article> : <article className="waiting-seat empty" key={seat}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">◇</div><h2>Lugar vazio</h2><p>Aguardando convidado</p></article>; })}</div><div className="waiting-actions"><div><strong>{room.members.length}/{room.maxPlayers} convidados</strong><span>{!full ? `Faltam ${room.maxPlayers - room.members.length} para completar a mesa` : allReady ? "Todos aceitaram a convocação" : "Aguardando todos marcarem pronto"}</span></div><button className={me?.ready ? "ready-toggle active" : "ready-toggle"} disabled={connectionState !== "online"} onClick={() => onReady(!me?.ready)}>{me?.ready ? "✓ Estou pronto" : "Marcar como pronto"}</button>{isHost && <button className="primary-button" disabled={!allReady || connectionState !== "online"} onClick={onStart}>{allReady ? "Abrir o baile" : `Aguardar mesa de ${room.maxPlayers}`}</button>}</div></section></main>;
+  return <main className="waiting-screen"><div className="ambient-glow" /><SimpleHeader onBack={onLeave} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Conectado" : "○ Reconectando"}</span>} /><section className="waiting-card"><p className="eyebrow">Antessala privada</p><h1>{room.name}</h1><div className="room-code-display"><span>Código para os amigos</span><strong>{room.code}</strong><button onClick={() => void navigator.clipboard?.writeText(room.code)}>Copiar</button></div>{message && <div className="online-notice">{message}</div>}<div className={`waiting-seats seats-${room.maxPlayers}`}>{Array.from({ length: room.maxPlayers }, (_, seat) => { const member = room.members[seat]; return member ? <article className={`waiting-seat ${member.ready ? "ready" : ""} ${member.online ? "online" : "offline"}`} key={member.userId}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">{PLAYER_SIGILS[seat % PLAYER_SIGILS.length]}</div><h2>{member.username}{member.userId === profile.id ? " · você" : ""}</h2><p>Convidado da Meia-Noite</p><div className="seat-badges">{member.isHost && <b>ANFITRIÃO</b>}<b>{member.online ? "ONLINE" : "RECONECTANDO"}</b></div><strong className="ready-state">{member.ready ? "✓ PRONTO" : "AGUARDANDO"}</strong></article> : <article className="waiting-seat empty" key={seat}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">◇</div><h2>Lugar vazio</h2><p>Aguardando convidado</p></article>; })}</div><div className="waiting-actions"><div><strong>{room.members.length}/{room.maxPlayers} convidados</strong><span>{!full ? `Faltam ${room.maxPlayers - room.members.length} para completar a mesa` : allReady ? "Todos aceitaram a convocação" : "Aguardando todos marcarem pronto"}</span></div><button className={me?.ready ? "ready-toggle active" : "ready-toggle"} disabled={connectionState !== "online"} onClick={() => onReady(!me?.ready)}>{me?.ready ? "✓ Estou pronto" : "Marcar como pronto"}</button>{isHost && <button className="primary-button" disabled={!allReady || connectionState !== "online"} onClick={onStart}>{allReady ? "Abrir o baile" : `Aguardar mesa de ${room.maxPlayers}`}</button>}</div></section></main>;
 }
 
 function SimpleHeader({ onBack, right }: { onBack: () => void; right: React.ReactNode }) {
@@ -1227,7 +1224,7 @@ function SimpleHeader({ onBack, right }: { onBack: () => void; right: React.Reac
 }
 
 function PlayerSeat({ player, isTurn, isLeader, onClick }: { player: Player; isTurn: boolean; isLeader: boolean; onClick: () => void; }) {
-  return <button className={`player-seat ${player.isHuman ? "human" : "rival"} ${isTurn ? "turn" : ""} ${isLeader ? "leader" : ""}`} onClick={onClick}><div className="seat-portrait">{player.character.sigil}{isLeader && <span className="leader-crown">♛</span>}</div><div className="seat-identity"><strong>{player.username}{player.isHuman && <small> você</small>}</strong><span>{player.character.name} · {player.isHuman ? "Seu Museu" : "Clique para negociar"}</span></div><div className="seat-resources"><span>● {player.gold}</span><span>✦ {visiblePrestige(player)}</span></div><div className="mini-inventory">{player.inventory.length === 0 ? <span>Sem relíquias</span> : player.inventory.slice(-6).map((item, index) => <b title={item.name} key={`${item.id}-${index}`}>{item.icon}</b>)}</div></button>;
+  return <button className={`player-seat ${player.isHuman ? "human" : "rival"} ${isTurn ? "turn" : ""} ${isLeader ? "leader" : ""}`} onClick={onClick}><div className="seat-portrait">{player.character.sigil}{isLeader && <span className="leader-crown">♛</span>}</div><div className="seat-identity"><strong>{player.username}{player.isHuman && <small> você</small>}</strong><span>{player.isHuman ? "Seu Museu" : "Clique para negociar"}</span></div><div className="seat-resources"><span>● {player.gold}</span><span>✦ {visiblePrestige(player)}</span></div><div className="mini-inventory">{player.inventory.length === 0 ? <span>Sem relíquias</span> : player.inventory.slice(-6).map((item, index) => <b title={item.name} key={`${item.id}-${index}`}>{item.icon}</b>)}</div></button>;
 }
 
 function MuseumPanel({ player, fusionCount, enabled, onInspect, onOpenFusion }: { player: Player; fusionCount: number; enabled: boolean; onInspect: (relic: OwnedRelic) => void; onOpenFusion: () => void; }) {

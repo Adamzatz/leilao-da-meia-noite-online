@@ -16,7 +16,7 @@ import {
   type Player,
 } from "../src/App.tsx";
 
-const character = { id: "cajango", name: "Cajango", title: "O Apostador Escarlate", sigil: "♠" } as const;
+const character = { id: "test-player", name: "Jogador de Teste", title: "Convidado da Meia-Noite", sigil: "♠" } as const;
 
 function player(id: string, overrides: Partial<Player> = {}): Player {
   return {

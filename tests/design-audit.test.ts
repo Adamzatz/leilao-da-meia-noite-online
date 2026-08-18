@@ -37,11 +37,21 @@ test("todos os poderes do catálogo pertencem ao motor implementado", () => {
 });
 
 test("cada partida recebe doze lotes comuns antes da votação", () => {
+  const loreIds = ["dialgo-coated-bone", "feliciano-marked-deck", "cajango-destroyer-gauntlet", "dimas-last-word-hammer"];
   for (let run = 0; run < 20; run += 1) {
     const deck = createDeck();
     assert.equal(deck.length, 12);
     assert.equal(new Set(deck.map((item) => item.id)).size, 12);
     assert.ok(deck.every((item) => RELICS.some((relic) => relic.id === item.id)));
+    assert.ok(loreIds.every((id) => deck.some((relic) => relic.id === id)), "a lore dos quatro amigos deve aparecer em toda partida");
+  }
+});
+
+test("as relíquias da lore representam os quatro amigos por nome e maldição", () => {
+  for (const name of ["Dialgo", "Feliciano", "Cajango", "Dimas"]) {
+    const themed = RELICS.filter((relic) => relic.name.includes(name));
+    assert.ok(themed.length >= 2, `${name} precisa de pelo menos duas relíquias próprias`);
+    assert.ok(themed.some((relic) => relic.cursed && relic.curse), `${name} precisa assinar uma maldição`);
   }
 });
 
