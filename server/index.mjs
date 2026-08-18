@@ -539,6 +539,8 @@ webSocketServer.on("connection", (socket, _request, user) => {
 
 if (production) {
   const dist = path.join(root, "dist");
+  const artifactDirectory = path.join(root, "public", "artifacts");
+  app.use("/artifacts", express.static(artifactDirectory, { maxAge: "1h", index: false }));
   app.use(express.static(dist, { maxAge: "1h", index: false }));
   app.use((request, response, next) => {
     if (request.method !== "GET" || request.path.startsWith("/api/") || request.path === "/ws") return next();
