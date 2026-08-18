@@ -451,7 +451,7 @@ function placeBid(game: GameState, playerId: string, amount: number): GameState 
   return advanceOrResolve(nextGame, updated, game.players, playerId);
 }
 
-function passTurn(game: GameState, playerId: string, forced = false): GameState {
+export function passTurn(game: GameState, playerId: string, forced = false): GameState {
   const auction = game.auction;
   if (!auction || game.status !== "bidding" || auction.turnId !== playerId) return game;
   const player = game.players.find((candidate) => candidate.id === playerId);
@@ -460,6 +460,25 @@ function passTurn(game: GameState, playerId: string, forced = false): GameState 
   const updated: Auction = { ...auction, activeIds: auction.activeIds.filter((id) => id !== playerId) };
   const text = forced ? `${player.character.name} foi enfeitiçado e perdeu este leilão.` : `${player.character.name} abandonou o lote.`;
   return advanceOrResolve({ ...game, players, auction: updated, log: appendLog(game, text) }, updated, players, playerId);
+}
+
+export function beginAuction(game: GameState): GameState {
+  if (game.status !== "announcement") return game;
+  const relic = game.deck[game.lotIndex];
+  if (!relic) return game;
+  const blockedIds = new Set(game.players.filter((player) => player.blockedAuctions > 0).map((player) => player.id));
+  const players = game.players.map((player) => blockedIds.has(player.id) ? { ...player, blockedAuctions: Math.max(0, player.blockedAuctions - 1) } : player);
+  const allIds = players.map((player) => player.id);
+  const rotation = allIds.length > 0 ? game.lotIndex % allIds.length : 0;
+  const order = [...allIds.slice(rotation), ...allIds.slice(0, rotation)].filter((id) => !blockedIds.has(id));
+  const surcharge = Math.max(0, ...players.map((player) => player.decreeStake));
+  const auction: Auction = { relic, currentBid: relic.start + surcharge - 1, highBidder: null, activeIds: [...order], order, turnId: order[0] ?? null, bidders: [] };
+  const blockedNames = players.filter((player) => blockedIds.has(player.id)).map((player) => player.character.name);
+  const openingMessage = blockedNames.length > 0
+    ? `O Anfitrião apresentou ${relic.name}. ${blockedNames.join(" e ")} ${blockedNames.length === 1 ? "foi retirado" : "foram retirados"} deste leilão.`
+    : `O Anfitrião apresentou ${relic.name}.`;
+  const prepared = { ...game, players, auction, status: "bidding" as const, lastAward: null, log: appendLog(game, openingMessage) };
+  return order.length === 0 ? finishAward(prepared, auction, players) : prepared;
 }
 
 function actionAvailable(relic: OwnedRelic): boolean { return (relic.exhaustedLots ?? 0) === 0 && (relic.power.once === "game" ? !relic.usedGame : !relic.usedAct); }
@@ -958,6 +977,21 @@ export default function Home() {
     return next;
   };
 
+  useEffect(() => {
+    const turnId = game.auction?.turnId;
+    if (!turnId || game.status !== "bidding" || !profile || onlineRoom?.hostUserId !== profile.id) return;
+    const blockedTurn = game.players.find((player) => player.id === turnId && player.blockedAuctions > 0);
+    if (!blockedTurn) return;
+    const timer = window.setTimeout(() => {
+      commitGame((current) => {
+        const currentTurnId = current.auction?.turnId;
+        const currentBlocked = current.players.find((player) => player.id === currentTurnId && player.blockedAuctions > 0);
+        return current.status === "bidding" && currentTurnId && currentBlocked ? passTurn(current, currentTurnId, true) : current;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [game.status, game.auction?.turnId, game.players, onlineRoom?.hostUserId, profile?.id]);
+
   const playTone = (kind: "click" | "bid" | "win") => {
     if (!soundOn || typeof window === "undefined") return;
     const context = audioRef.current ?? new AudioContext(); audioRef.current = context;
@@ -1025,16 +1059,7 @@ export default function Home() {
   };
 
   const openAuction = () => {
-    commitGame((current) => {
-      const prepared = current;
-      const relic = prepared.deck[prepared.lotIndex];
-      const ids = prepared.players.map((player) => player.id);
-      const rotation = prepared.lotIndex % ids.length;
-      const order = [...ids.slice(rotation), ...ids.slice(0, rotation)];
-      const surcharge = Math.max(0, ...prepared.players.map((player) => player.decreeStake));
-      const auction: Auction = { relic, currentBid: relic.start + surcharge - 1, highBidder: null, activeIds: ids, order, turnId: order[0], bidders: [] };
-      return { ...prepared, status: "bidding", auction, lastAward: null, log: appendLog(prepared, `O Anfitrião apresentou ${relic.name}.`) };
-    });
+    commitGame((current) => beginAuction(current));
     playTone("click");
   };
 

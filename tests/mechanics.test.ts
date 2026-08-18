@@ -7,11 +7,13 @@ import {
   RELICS,
   TALENTS,
   artifactLimit,
+  beginAuction,
   calculateScore,
   completeTrade,
   executeRelicAction,
   executeTalentAction,
   intrigueProgress,
+  passTurn,
   type GameState,
   type Player,
 } from "../src/App.tsx";
@@ -84,6 +86,32 @@ test("Selo da Primazia concede desconto compartilhável sem trocar o baralho", (
   assert.deepEqual(result.deck.map((item) => item.id), initial.deck.map((item) => item.id));
   assert.equal(result.players[0].bidDiscount, 3);
   assert.deepEqual(result.players[0].activeTalentsUsedGame, ["swap-lot"]);
+});
+
+test("jogadores expulsos são removidos automaticamente da ordem do leilão", () => {
+  const blocked = player("blocked", { blockedAuctions: 1 });
+  const initial = game([player("buyer"), blocked, player("third")]);
+  const result = beginAuction(initial);
+
+  assert.equal(result.status, "bidding");
+  assert.equal(result.players.find((candidate) => candidate.id === blocked.id)?.blockedAuctions, 0);
+  assert.ok(!result.auction?.activeIds.includes(blocked.id));
+  assert.ok(!result.auction?.order.includes(blocked.id));
+  assert.notEqual(result.auction?.turnId, blocked.id);
+});
+
+test("um leilão legado preso em jogador expulso avança por passe forçado", () => {
+  const relic = structuredClone(RELICS[0]);
+  const stuck = {
+    ...game([player("buyer"), player("blocked", { blockedAuctions: 1 }), player("third")]),
+    status: "bidding" as const,
+    auction: { relic, currentBid: relic.start - 1, highBidder: null, activeIds: ["buyer", "blocked", "third"], order: ["buyer", "blocked", "third"], turnId: "blocked", bidders: [] },
+  };
+  const result = passTurn(stuck, "blocked", true);
+
+  assert.equal(result.players.find((candidate) => candidate.id === "blocked")?.blockedAuctions, 0);
+  assert.ok(!result.auction?.activeIds.includes("blocked"));
+  assert.equal(result.auction?.turnId, "third");
 });
 
 test("Língua de Prata e Carta do Duque devolvem moedas numa compra real", () => {
