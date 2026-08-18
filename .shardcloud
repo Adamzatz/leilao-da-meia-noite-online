@@ -1,7 +1,7 @@
 DISPLAY_NAME=Leilao da Meia-Noite Online
 DESCRIPTION=Jogo multiplayer de leilao, reliquias e intrigas para 3 ou 4 amigos.
 LANGUAGE=node
-MEMORY=1024
+MEMORY=512
 VERSION=recommended
 SUBDOMAIN=leilaodameianoite
 CUSTOM_COMMAND=npm run build && npm run start
