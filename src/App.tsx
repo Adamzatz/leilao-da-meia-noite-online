@@ -79,7 +79,6 @@ export type GameState = {
 };
 
 const PLAYER_SIGILS = ["♠", "♛", "◈", "♜"];
-const FRIEND_LORE_IDS = ["dialgo-coated-bone", "feliciano-marked-deck", "cajango-destroyer-gauntlet", "dimas-last-word-hammer"];
 export const LORE_FIGURES = ["Zat", "Eichiro Oda", "Laya", "Julia Briolet", "Toryama", "José", "Barthor", "Olivia", "Sasha Cortex", "Anjo Caído", "Veronica", "Ferndinand", "Luna", "Duvan", "Bélico", "Asma Armas", "Ximbinha", "Sabine", "Cajango", "Dialgo", "Feliciano", "Dimas", "Roman", "Galthak", "Daniel Ramos", "Haika Kimira", "Giovana", "Ana Clara", "FABIANA"] as const;
 
 function namedSignatures(text: string): string[] {
@@ -265,20 +264,58 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-export function createDeck(): Relic[] {
+let previousRotationSignature = "";
+
+function rotationSignature(relics: readonly Pick<Relic, "id">[]): string {
+  return relics.map((relic) => relic.id).sort().join("|");
+}
+
+function createDeckDraft(): { deck: Relic[]; protectedIds: Set<string> } {
   const regularIds = new Set(RELICS.map((relic) => relic.id));
   const regularTriples = FUSION_RECIPES.filter((recipe) => recipe.tier === 3 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const regularDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const recipes = [...shuffle(regularTriples).slice(0, 1), ...shuffle(regularDuos).slice(0, 2)];
-  const required = new Set([...FRIEND_LORE_IDS, ...recipes.flatMap((recipe) => recipe.components)]);
-  const guaranteed = [
-    ...FRIEND_LORE_IDS.map((id) => RELICS.find((relic) => relic.id === id)!),
-    ...RELICS.filter((relic) => required.has(relic.id) && !FRIEND_LORE_IDS.includes(relic.id)),
-  ];
-  const fillers = shuffle(RELICS.filter((relic) => !required.has(relic.id))).slice(0, 12 - guaranteed.length);
+  const protectedIds = new Set(recipes.flatMap((recipe) => recipe.components));
+  const guaranteed = RELICS.filter((relic) => protectedIds.has(relic.id));
+  const fillers = shuffle(RELICS.filter((relic) => !protectedIds.has(relic.id))).slice(0, 12 - guaranteed.length);
   const deck = shuffle([...guaranteed, ...fillers]);
-  const disposable = deck.findIndex((relic) => !required.has(relic.id));
+  const disposable = deck.findIndex((relic) => !protectedIds.has(relic.id));
   if (disposable >= 0 && disposable !== 6) [deck[6], deck[disposable]] = [deck[disposable], deck[6]];
+  return { deck, protectedIds };
+}
+
+export function createDeck(previousRelics: readonly Pick<Relic, "id">[] = []): Relic[] {
+  const avoidedSignature = previousRelics.length > 0 ? rotationSignature(previousRelics) : previousRotationSignature;
+  let draft = createDeckDraft();
+  for (let attempt = 0; attempt < 12 && rotationSignature(draft.deck) === avoidedSignature; attempt += 1) draft = createDeckDraft();
+
+  if (rotationSignature(draft.deck) === avoidedSignature) {
+    const previousIds = new Set(avoidedSignature.split("|"));
+    const replaceIndex = draft.deck.findIndex((relic) => !draft.protectedIds.has(relic.id));
+    const replacement = RELICS.find((relic) => !draft.deck.some((current) => current.id === relic.id) && !previousIds.has(relic.id))
+      ?? RELICS.find((relic) => !draft.deck.some((current) => current.id === relic.id));
+    if (replaceIndex >= 0 && replacement) draft.deck[replaceIndex] = replacement;
+  }
+
+  previousRotationSignature = rotationSignature(draft.deck);
+  return draft.deck;
+}
+
+function createPersistentDeck(userId: string): Relic[] {
+  const storageKey = `midnight-last-rotation:${userId}`;
+  let previousRelics: Array<Pick<Relic, "id">> = [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "[]");
+    if (Array.isArray(stored)) previousRelics = stored.filter((id): id is string => typeof id === "string").map((id) => ({ id }));
+  } catch {
+    previousRelics = [];
+  }
+  const deck = createDeck(previousRelics);
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(deck.map((relic) => relic.id)));
+  } catch {
+    // A rotação continua aleatória mesmo quando o navegador bloqueia armazenamento local.
+  }
   return deck;
 }
 
@@ -974,7 +1011,7 @@ export default function Home() {
       const skills = member.skills;
       return { id: member.userId, userId: member.userId, username: member.username, character, isHuman: member.userId === profile.id, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0, intrigueOptions: shuffle(INTRIGUES).slice(0, 3).map((intrigue) => intrigue.id), intrigueId: null, intrigueChosen: false, relicsSold: 0, hostileActions: 0, tradePartners: [] };
     });
-    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createDeck(), status: "intrigue", log: ["As vinte e nove assinaturas da Crônica deixaram relíquias no salão. FABIANA observa enquanto as Intrigas Secretas são entregues."] };
+    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createPersistentDeck(profile.id), status: "intrigue", log: ["Uma nova rotação sorteou 12 relíquias entre as 42 peças da Crônica. FABIANA observa enquanto as Intrigas Secretas são entregues."] };
     sendSocket({ type: "room:start", gameState: initialGame });
     playTone("click");
   };
@@ -1226,7 +1263,7 @@ function LibraryScreen({ onBack }: { onBack: () => void; }) {
     return !query || [recipe.result.name, recipe.result.power.name, recipe.result.power.description, ...componentNames, ...recipe.result.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query);
   });
   const resultCount = section === "relics" ? regular.length : section === "fusions" ? fusions.length : section === "forbidden" ? forbidden.length : intrigues.length;
-  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "Peças que podem aparecer nos lotes comuns" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
+  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "12 destas peças são sorteadas em uma nova rotação a cada partida" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
 }
 
 function RelicLibraryCard({ relic, forbidden = false }: { relic: Relic; forbidden?: boolean }) {
@@ -1363,5 +1400,5 @@ function CounterOfferModal({ offer, seller, relic, onAccept, onDecline }: { offe
 }
 
 function RulesModal({ onClose }: { onClose: () => void; }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Sele sua intriga</strong><p>Antes do primeiro lote, escolha um de três objetivos secretos. Se cumprir a condição, ganhe de 4 a 5 Prestígios na revelação final.</p></div></article><article><span>02</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>03</span><div><strong>Compre relíquias</strong><p>Use ouro nos leilões. Relíquias geram Prestígio, poderes ativos e às vezes maldições.</p></div></article><article><span>04</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>05</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>06</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Negociações também podem avançar sua Intriga Secreta.</p></div></article><article><span>07</span><div><strong>Vote no proibido</strong><p>A corte escolhe entre {LEGENDARY_RELICS.length} Itens Proibidos. O vencedor substitui o primeiro lote do ato seguinte e alguns deles completam infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Relíquias, efeitos, ouro e Intrigas cumpridas formam o Prestígio final. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Sele sua intriga</strong><p>Antes do primeiro lote, escolha um de três objetivos secretos. Se cumprir a condição, ganhe de 4 a 5 Prestígios na revelação final.</p></div></article><article><span>02</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>03</span><div><strong>Descubra a rotação</strong><p>Cada partida sorteia 12 das {RELICS.length} relíquias. A seleção muda a cada baile, mas é idêntica e sincronizada para todos na mesma sala.</p></div></article><article><span>04</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>05</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>06</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Negociações também podem avançar sua Intriga Secreta.</p></div></article><article><span>07</span><div><strong>Vote no proibido</strong><p>A corte escolhe entre {LEGENDARY_RELICS.length} Itens Proibidos. O vencedor substitui o primeiro lote do ato seguinte e alguns deles completam infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Relíquias, efeitos, ouro e Intrigas cumpridas formam o Prestígio final. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
 }

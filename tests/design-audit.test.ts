@@ -36,15 +36,25 @@ test("todos os poderes do catálogo pertencem ao motor implementado", () => {
   }
 });
 
-test("cada partida recebe doze lotes comuns antes da votação", () => {
-  const loreIds = ["dialgo-coated-bone", "feliciano-marked-deck", "cajango-destroyer-gauntlet", "dimas-last-word-hammer"];
-  for (let run = 0; run < 20; run += 1) {
+test("cada partida recebe uma rotação aleatória diferente com doze lotes", () => {
+  const seenArtifacts = new Set<string>();
+  let previousDeck: ReturnType<typeof createDeck> = [];
+  for (let run = 0; run < 30; run += 1) {
     const deck = createDeck();
     assert.equal(deck.length, 12);
     assert.equal(new Set(deck.map((item) => item.id)).size, 12);
     assert.ok(deck.every((item) => RELICS.some((relic) => relic.id === item.id)));
-    assert.ok(loreIds.every((id) => deck.some((relic) => relic.id === id)), "a lore dos quatro amigos deve aparecer em toda partida");
+    if (previousDeck.length > 0) {
+      assert.notEqual(
+        deck.map((item) => item.id).sort().join("|"),
+        previousDeck.map((item) => item.id).sort().join("|"),
+        "partidas consecutivas não podem repetir a mesma seleção de artefatos",
+      );
+    }
+    deck.forEach((item) => seenArtifacts.add(item.id));
+    previousDeck = deck;
   }
+  assert.ok(seenArtifacts.size > 12, "a rotação precisa usar o catálogo além de um conjunto fixo");
 });
 
 test("as relíquias da lore representam os quatro amigos por nome e maldição", () => {

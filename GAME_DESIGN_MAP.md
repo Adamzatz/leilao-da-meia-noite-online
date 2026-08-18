@@ -42,7 +42,7 @@ flowchart TD
 |---|---|
 | Jogadores | Exatamente 3 ou 4 pessoas reais |
 | Atos | 4 |
-| Lotes | 3 por ato, 12 no total |
+| Lotes | 3 por ato, 12 no total, sorteados novamente em cada partida |
 | Ouro inicial | 15; Bolsa do Patrono acrescenta 3 |
 | Renda entre atos | 5, com bônus e descontos de talentos, pobreza e maldições |
 | Esmola do Anfitrião | Jogadores empatados com o menor ouro recebem +2 |
@@ -85,7 +85,7 @@ São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro 
 
 | Sistema | Quantidade | Função |
 |---|---:|---|
-| Relíquias comuns | 42 | Formam o baralho de 12 lotes; quatro peças de lore são garantidas |
+| Relíquias comuns | 42 | Cada partida sorteia uma rotação diferente de 12 lotes e preserva receitas possíveis |
 | Itens Proibidos | 8 | Candidatos à votação do meio da partida; inclui FABIANA, A Criadora |
 | Infusões | 34 | Transformações duplas ou triplas |
 | Talentos | 27 | Progressão permanente em 5 ramos |
@@ -96,7 +96,7 @@ São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro 
 
 O nome criado no cadastro é a identidade exibida na sala, no leilão, nas negociações e no placar. Não existe seleção de personagem nem vantagem ligada a Cajango, Dialgo, Feliciano ou Dimas.
 
-Os nomes da Crônica pertencem ao mundo do jogo e assinam relíquias, maldições, infusões, Itens Proibidos e Intrigas Secretas. Osso Revestido de Dialgo, Baralho Marcado de Feliciano, Manopla Destruidora de Cajango e Martelo da Última Palavra de Dimas aparecem em toda partida, garantindo uma base reconhecível. Roman, Galthak, Daniel Ramos, Haika Kimira, Giovana e Ana Clara possuem relíquias e infusões próprias. FABIANA, A Criadora é um Item Proibido de 9 Prestígios cujo poder concede 5 moedas, 5 Prestígios, proteção contra uma maldição e uma ativação adicional no ato.
+Os nomes da Crônica pertencem ao mundo do jogo e assinam relíquias, maldições, infusões, Itens Proibidos e Intrigas Secretas. Osso Revestido de Dialgo, Baralho Marcado de Feliciano, Manopla Destruidora de Cajango e Martelo da Última Palavra de Dimas fazem parte do catálogo, mas agora disputam espaço na rotação aleatória como as demais peças. Roman, Galthak, Daniel Ramos, Haika Kimira, Giovana e Ana Clara possuem relíquias e infusões próprias. FABIANA, A Criadora é um Item Proibido de 9 Prestígios cujo poder concede 5 moedas, 5 Prestígios, proteção contra uma maldição e uma ativação adicional no ato.
 
 ## Intrigas Secretas
 
@@ -129,7 +129,7 @@ Decisões de equilíbrio:
 | Lobby e salas | Operacional | Testes com 3 e 4 conexões reais |
 | Sincronização da partida | Operacional | Controle de versão e reconexão por WebSocket |
 | Privacidade das Intrigas | Operacional | Servidor personaliza o estado por jogador e revela apenas no final |
-| Leilão e rotação | Operacional | Lance mínimo, ouro, desconto, desistência e martelo usam estado compartilhado |
+| Leilão e rotação | Operacional | Cada início sorteia 12 das 42 peças, evita repetir a seleção anterior e sincroniza o resultado da sala |
 | Renda entre atos | Operacional | Reseta limites do ato e aplica pobreza, talentos e maldições |
 | Museu e poderes | Operacional | Limite de ativações calculado no motor e exibido na interface |
 | Negociação | Operacional | Oferta, contraproposta, venda, Prestígio e parceiros são sincronizados |
@@ -147,7 +147,7 @@ Os testes do projeto validam:
 - todas as receitas com componentes existentes e custos corretos;
 - todos os poderes ligados a um tipo reconhecido pelo motor;
 - baralho com 12 lotes comuns e sem duplicatas;
-- presença garantida das quatro relíquias centrais da lore em cada baralho;
+- rotações consecutivas diferentes, usando o catálogo além de um conjunto fixo;
 - presença dos 29 nomes em artefatos, infusões e conteúdo secreto;
 - componentes válidos para as sete novas infusões e execução do poder de FABIANA;
 - progresso calculável para as oito Intrigas;
