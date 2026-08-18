@@ -48,7 +48,7 @@ flowchart TD
 | Esmola do Anfitrião | Jogadores empatados com o menor ouro recebem +2 |
 | Ativações de artefatos | 2 por ato; talentos elevam para 3 e depois 4 |
 | Infusões | No máximo 1 por ato; dupla custa 2, tripla custa 4 |
-| Compras de rivais | 1 por ato; Contrabandista permite 2 |
+| Mercado entre Museus | Peça uma relíquia rival oferecendo ouro ou ofereça uma peça sua com preço definido; o comprador realiza 1 compra por ato, ou 2 com Contrabandista |
 | Votação proibida | Depois do sexto lote; empate é decidido aleatoriamente |
 | Vitória | Maior Prestígio final |
 
@@ -118,6 +118,8 @@ Cada jogador recebe três opções aleatórias e escolhe uma. O servidor remove 
 | Último Apostador | No máximo 1 moeda ao final | +4 |
 | Colecionador Obsessivo | 5 relíquias no Museu | +5 |
 | Conspirador da Corte | Negociar com 2 jogadores diferentes | +4 |
+
+O mercado funciona nas duas direções. Ao selecionar outro jogador, é possível pedir uma peça do Museu dele ou oferecer uma peça do próprio Museu. O destinatário pode aceitar, recusar ou contrapropor; quem enviou pode retirar a proposta enquanto aguarda. Ouro, posse da relíquia e limite de compras são validados novamente no aceite.
 
 Decisões de equilíbrio:
 

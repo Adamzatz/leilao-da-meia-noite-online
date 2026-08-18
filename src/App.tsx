@@ -56,7 +56,18 @@ type Award = { winnerId: string | null; price: number; message: string; };
 type Score = { playerId: string; relics: number; talents: number; infusions: number; gold: number; curses: number; intrigue: number; intrigueId: string | null; total: number; fusionNames: string[]; };
 type VoteOutcome = { winnerId: string; counts: Record<string, number>; };
 type Profile = { id: string; username: string; lumens: number; unlockedTalents: string[]; wins: number; };
-type TradeOffer = { buyerId: string; sellerId: string; relicId: string; amount: number; message: string; };
+type TradeOffer = {
+  buyerId: string;
+  sellerId: string;
+  relicId: string;
+  amount: number;
+  message: string;
+  kind?: "buy-request" | "sale-offer";
+  proposerId?: string;
+  responderId?: string;
+  status?: "offer" | "counter";
+};
+type NegotiationDraft = { buyerId: string; sellerId: string; relicId: string; amount: number; kind: "buy-request" | "sale-offer"; message: string; };
 type LobbyRoom = { id: string; code: string; name: string; hostName: string; maxPlayers: 3 | 4; playerCount: number; status: "waiting" | "playing"; createdAt: number; };
 type RoomMember = { userId: string; username: string; skills: string[]; wins: number; ready: boolean; seat: number; online: boolean; isHost: boolean; };
 type OnlineRoom = { id: string; code: string; name: string; hostUserId: string; maxPlayers: 3 | 4; status: "waiting" | "playing" | "finished"; version: number; viewerId: string; gameState: GameState | null; members: RoomMember[]; };
@@ -712,7 +723,8 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
     } else if (relic.id === "fusion-scarlet-war-god") { let broken = 0; players.forEach((player) => { if (player.id !== actor.id) { const paid = Math.min(3, player.gold); player.gold -= paid; actor.gold += paid; if (paid < 3) { player.prestigeBonus -= 2; actor.prestigeBonus += 2; broken += 1; } } }); relic.bonusPrestige = (relic.bonusPrestige ?? 0) - 3; message = `O Apocalipse devastou a corte e quebrou ${broken} rivais sem ouro.`;
     } else if (relic.id === "fusion-first-dawn-witness" && game.status === "awarded" && game.lastAward?.winnerId) { const winner = players.find((player) => player.id === game.lastAward?.winnerId); const awarded = winner?.inventory.find((item) => item.id === game.deck[game.lotIndex].id); if (winner && awarded) { winner.inventory = winner.inventory.filter((item) => item !== awarded); winner.gold += game.lastAward.price; winner.itemsWonAct = Math.max(0, winner.itemsWonAct - 1); actor.bidDiscount += 2; message = `A Testemunha desfez a conquista de ${awarded.name}; o leilão será reaberto.`; return { ...game, players, deck, status: "announcement", auction: null, lastAward: null, log: appendLog(game, message) }; } }
   }
-  return { ...game, players, deck, log: appendLog(game, message) };
+  const pendingOffer = game.pendingOffer && players.find((player) => player.id === game.pendingOffer?.sellerId)?.inventory.some((item) => item.id === game.pendingOffer?.relicId) ? game.pendingOffer : null;
+  return { ...game, players, deck, pendingOffer, log: appendLog(game, message) };
 }
 
 export function executeTalentAction(game: GameState, actorId: string, talentId: string, targetId?: string): GameState {
@@ -760,12 +772,69 @@ function salePrestige(relic: OwnedRelic, seller: Player): number {
   return Math.max(1, relic.prestige - 1) + (hasSkill(seller, "shadow-merchant") ? 1 : 0) + seller.salePrestigeBoost;
 }
 
+function tradeLimit(player: Player): number {
+  return hasSkill(player, "smuggler") ? 2 : 1;
+}
+
+function tradeResponderId(offer: TradeOffer): string {
+  if (offer.responderId) return offer.responderId;
+  return offer.message.toLocaleLowerCase("pt-BR").includes("contraproposta") ? offer.buyerId : offer.sellerId;
+}
+
+function tradeProposerId(offer: TradeOffer): string {
+  if (offer.proposerId) return offer.proposerId;
+  return tradeResponderId(offer) === offer.buyerId ? offer.sellerId : offer.buyerId;
+}
+
+export function proposeTrade(game: GameState, proposerId: string, buyerId: string, sellerId: string, relicId: string, amount: number, kind: "buy-request" | "sale-offer"): GameState {
+  if (game.pendingOffer || !["announcement", "awarded"].includes(game.status)) return game;
+  const buyer = game.players.find((player) => player.id === buyerId);
+  const seller = game.players.find((player) => player.id === sellerId);
+  const relic = seller?.inventory.find((item) => item.id === relicId);
+  const expectedProposer = kind === "buy-request" ? buyerId : sellerId;
+  const normalizedAmount = Math.floor(amount);
+  if (!buyer || !seller || !relic || buyer.id === seller.id || proposerId !== expectedProposer || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
+  const responderId = proposerId === buyerId ? sellerId : buyerId;
+  const message = kind === "buy-request"
+    ? `${buyer.character.name} oferece ${normalizedAmount} moedas por ${relic.name}.`
+    : `${seller.character.name} oferece ${relic.name} por ${normalizedAmount} moedas.`;
+  const pendingOffer: TradeOffer = { buyerId, sellerId, relicId, amount: normalizedAmount, kind, proposerId, responderId, status: "offer", message };
+  return { ...game, pendingOffer, log: appendLog(game, `${game.players.find((player) => player.id === proposerId)?.character.name ?? "Um convidado"} abriu uma negociação com ${game.players.find((player) => player.id === responderId)?.character.name ?? "a corte"}.`) };
+}
+
+export function counterTradeOffer(game: GameState, actorId: string, amount: number): GameState {
+  const offer = game.pendingOffer;
+  if (!offer || tradeResponderId(offer) !== actorId) return game;
+  const buyer = game.players.find((player) => player.id === offer.buyerId);
+  const seller = game.players.find((player) => player.id === offer.sellerId);
+  const relic = seller?.inventory.find((item) => item.id === offer.relicId);
+  const normalizedAmount = Math.floor(amount);
+  if (!buyer || !seller || !relic || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
+  const nextResponder = tradeProposerId(offer);
+  const actor = game.players.find((player) => player.id === actorId)!;
+  return { ...game, pendingOffer: { ...offer, amount: normalizedAmount, proposerId: actorId, responderId: nextResponder, status: "counter", message: `${actor.character.name} contrapropôs ${normalizedAmount} moedas por ${relic.name}.` }, log: appendLog(game, `${actor.character.name} devolveu uma contraproposta.`) };
+}
+
+export function acceptTradeOffer(game: GameState, actorId: string): GameState {
+  const offer = game.pendingOffer;
+  if (!offer || tradeResponderId(offer) !== actorId) return game;
+  return completeTrade(game, offer.buyerId, offer.sellerId, offer.relicId, offer.amount);
+}
+
+export function cancelTradeOffer(game: GameState, actorId: string): GameState {
+  const offer = game.pendingOffer;
+  if (!offer || ![tradeProposerId(offer), tradeResponderId(offer)].includes(actorId)) return game;
+  const actor = game.players.find((player) => player.id === actorId);
+  const withdrew = tradeProposerId(offer) === actorId;
+  return { ...game, pendingOffer: null, log: appendLog(game, `${actor?.character.name ?? "Um convidado"} ${withdrew ? "retirou" : "recusou"} a proposta de negociação.`) };
+}
+
 export function completeTrade(game: GameState, buyerId: string, sellerId: string, relicId: string, amount: number): GameState {
   const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })), tradePartners: [...(player.tradePartners ?? [])] }));
   const buyer = players.find((player) => player.id === buyerId);
   const seller = players.find((player) => player.id === sellerId);
   const relic = seller?.inventory.find((item) => item.id === relicId);
-  if (!buyer || !seller || !relic || amount < 0 || buyer.gold < amount) return game;
+  if (!buyer || !seller || !relic || amount < 1 || buyer.gold < amount || buyer.tradesAct >= tradeLimit(buyer)) return game;
   buyer.gold -= amount; seller.gold += amount;
   const rebate = Math.min(amount, buyer.tradeCharm + (hasSkill(buyer, "silver-tongue") ? 1 : 0));
   buyer.gold += rebate;
@@ -821,7 +890,7 @@ export default function Home() {
   const [actionRelicId, setActionRelicId] = useState<string | null>(null);
   const [fusionOpen, setFusionOpen] = useState(false);
   const [rivalId, setRivalId] = useState<string | null>(null);
-  const [negotiation, setNegotiation] = useState<{ sellerId: string; relicId: string; amount: number; status: "draft" | "counter"; message: string } | null>(null);
+  const [negotiation, setNegotiation] = useState<NegotiationDraft | null>(null);
   const [activeTalentId, setActiveTalentId] = useState<string | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
@@ -1125,43 +1194,54 @@ export default function Home() {
     playTone("click");
   };
 
-  const openNegotiation = (sellerId: string, relicId: string) => {
+  const openBuyRequest = (sellerId: string, relicId: string) => {
     const buyer = game.players.find((player) => player.isHuman);
     const seller = game.players.find((player) => player.id === sellerId);
     const relic = seller?.inventory.find((item) => item.id === relicId);
     if (!buyer || !relic) return;
-    setNegotiation({ sellerId, relicId, amount: Math.min(buyer.gold, askingPrice(relic, buyer)), status: "draft", message: "Faça sua primeira oferta." });
+    setNegotiation({ buyerId: buyer.id, sellerId, relicId, amount: Math.min(buyer.gold, askingPrice(relic, buyer)), kind: "buy-request", message: "Diga quanto você oferece para levar esta relíquia." });
     setRivalId(null);
   };
 
-  const submitBuyOffer = (amount: number) => {
+  const openSaleOffer = (buyerId: string, relicId: string) => {
+    const seller = game.players.find((player) => player.isHuman);
+    const buyer = game.players.find((player) => player.id === buyerId);
+    const relic = seller?.inventory.find((item) => item.id === relicId);
+    if (!seller || !buyer || !relic) return;
+    setNegotiation({ buyerId, sellerId: seller.id, relicId, amount: Math.min(buyer.gold, askingPrice(relic, buyer)), kind: "sale-offer", message: "Defina o preço que você deseja receber por esta relíquia." });
+    setRivalId(null);
+  };
+
+  const submitTradeProposal = (amount: number) => {
     if (!negotiation) return;
-    const buyer = game.players.find((player) => player.isHuman);
+    const proposer = game.players.find((player) => player.isHuman);
+    const buyer = game.players.find((player) => player.id === negotiation.buyerId);
     const seller = game.players.find((player) => player.id === negotiation.sellerId);
     const relic = seller?.inventory.find((item) => item.id === negotiation.relicId);
-    if (!buyer || !seller || !relic || amount > buyer.gold || amount < 1) return;
-    commitGame((current) => ({ ...current, pendingOffer: { buyerId: buyer.id, sellerId: seller.id, relicId: relic.id, amount, message: `${buyer.character.name} oferece ${amount} moedas por ${relic.name}.` }, log: appendLog(current, `${buyer.character.name} enviou uma proposta privada a ${seller.character.name}.`) }));
+    if (!proposer || !buyer || !seller || !relic || amount > buyer.gold || amount < 1) return;
+    commitGame((current) => proposeTrade(current, proposer.id, buyer.id, seller.id, relic.id, amount, negotiation.kind));
     setNegotiation(null);
     playTone("click");
   };
 
-  const acceptIncomingOffer = () => {
-    const offer = game.pendingOffer;
-    if (!offer) return;
-    commitGame((current) => completeTrade(current, offer.buyerId, offer.sellerId, offer.relicId, offer.amount));
+  const acceptPendingTrade = () => {
+    const actor = game.players.find((player) => player.isHuman);
+    if (!actor) return;
+    commitGame((current) => acceptTradeOffer(current, actor.id));
     playTone("win");
   };
 
-  const counterIncomingOffer = (amount: number) => {
-    const offer = game.pendingOffer;
-    if (!offer) return;
-    const buyer = game.players.find((player) => player.id === offer.buyerId);
-    const seller = game.players.find((player) => player.id === offer.sellerId);
-    const relic = seller?.inventory.find((item) => item.id === offer.relicId);
-    if (!buyer || !seller || !relic || amount < 1) return;
-    if (amount > buyer.gold) return;
-    commitGame((current) => ({ ...current, pendingOffer: { ...offer, amount, message: `${seller.character.name} fez uma contraproposta de ${amount} moedas.` }, log: appendLog(current, `${seller.character.name} devolveu uma contraproposta.`) }));
+  const counterPendingTrade = (amount: number) => {
+    const actor = game.players.find((player) => player.isHuman);
+    if (!actor) return;
+    commitGame((current) => counterTradeOffer(current, actor.id, amount));
     playTone("click");
+  };
+
+  const cancelPendingTrade = () => {
+    const actor = game.players.find((player) => player.isHuman);
+    if (!actor) return;
+    commitGame((current) => cancelTradeOffer(current, actor.id));
   };
 
   const enterLobby = () => {
@@ -1189,13 +1269,14 @@ export default function Home() {
   const detailRelic = human?.inventory.find((item) => item.id === detailRelicId);
   const rival = game.players.find((player) => player.id === rivalId);
   const activeTalent = TALENTS.find((talent) => talent.id === activeTalentId);
+  const negotiationBuyer = game.players.find((player) => player.id === negotiation?.buyerId);
   const negotiationSeller = game.players.find((player) => player.id === negotiation?.sellerId);
   const negotiationRelic = negotiationSeller?.inventory.find((item) => item.id === negotiation?.relicId);
-  const incomingBuyer = game.players.find((player) => player.id === game.pendingOffer?.buyerId);
-  const incomingRelic = human?.inventory.find((item) => item.id === game.pendingOffer?.relicId);
-  const counterSeller = game.players.find((player) => player.id === game.pendingOffer?.sellerId);
-  const counterRelic = counterSeller?.inventory.find((item) => item.id === game.pendingOffer?.relicId);
-  const counterForHuman = Boolean(game.pendingOffer && human?.id === game.pendingOffer.buyerId && game.pendingOffer.message.toLocaleLowerCase("pt-BR").includes("contraproposta"));
+  const pendingBuyer = game.players.find((player) => player.id === game.pendingOffer?.buyerId);
+  const pendingSeller = game.players.find((player) => player.id === game.pendingOffer?.sellerId);
+  const pendingRelic = pendingSeller?.inventory.find((item) => item.id === game.pendingOffer?.relicId);
+  const pendingForHuman = Boolean(game.pendingOffer && human?.id === tradeResponderId(game.pendingOffer));
+  const waitingOnHuman = Boolean(game.pendingOffer && human?.id === tradeProposerId(game.pendingOffer));
   const fusionRecipes = human ? availableFusionRecipes(human) : [];
 
   if (!authReady) return <main className="auth-screen"><div className="auth-loading"><span>♛</span><p>Abrindo o registro do baile…</p></div></main>;
@@ -1253,10 +1334,10 @@ export default function Home() {
       {actionRelic && <ActionTargetModal relic={actionRelic} actor={human!} game={game} onClose={() => setActionRelicId(null)} onTarget={(targetId) => { commitGame((current) => executeRelicAction(current, human!.id, actionRelic.id, targetId)); setActionRelicId(null); playTone("win"); }} />}
       {fusionOpen && <FusionModal player={human!} recipes={fusionRecipes} enabled={canManageMuseum} onClose={() => setFusionOpen(false)} onFuse={(recipeId) => { commitGame((current) => performFusion(current, human!.id, recipeId)); setFusionOpen(false); playTone("win"); }} />}
       {activeTalent && <TalentActionModal talent={activeTalent} player={human!} players={game.players} onClose={() => setActiveTalentId(null)} onTarget={(targetId) => { commitGame((current) => executeTalentAction(current, human!.id, activeTalent.id, targetId)); setActiveTalentId(null); playTone("win"); }} />}
-      {rival && <RivalModal rival={rival} buyer={human!} enabled={canManageMuseum} onClose={() => setRivalId(null)} onNegotiate={(relicId) => openNegotiation(rival.id, relicId)} />}
-      {negotiation && negotiationSeller && negotiationRelic && <NegotiationModal key={`${negotiation.sellerId}-${negotiation.relicId}-${negotiation.status}-${negotiation.amount}`} offer={negotiation} buyer={human!} seller={negotiationSeller} relic={negotiationRelic} onClose={() => setNegotiation(null)} onSubmit={submitBuyOffer} />}
-      {game.pendingOffer && incomingBuyer && incomingRelic && <IncomingOfferModal key={`${game.pendingOffer.buyerId}-${game.pendingOffer.relicId}-${game.pendingOffer.amount}`} offer={game.pendingOffer} buyer={incomingBuyer} seller={human!} relic={incomingRelic} onAccept={acceptIncomingOffer} onCounter={counterIncomingOffer} onDecline={() => commitGame((current) => ({ ...current, pendingOffer: null }))} />}
-      {counterForHuman && game.pendingOffer && counterSeller && counterRelic && <CounterOfferModal offer={game.pendingOffer} seller={counterSeller} relic={counterRelic} onAccept={() => { commitGame((current) => completeTrade(current, game.pendingOffer!.buyerId, game.pendingOffer!.sellerId, game.pendingOffer!.relicId, game.pendingOffer!.amount)); playTone("win"); }} onDecline={() => commitGame((current) => ({ ...current, pendingOffer: null }))} />}
+      {rival && <RivalModal rival={rival} player={human!} enabled={canManageMuseum && !game.pendingOffer} busy={Boolean(game.pendingOffer)} onClose={() => setRivalId(null)} onRequest={(relicId) => openBuyRequest(rival.id, relicId)} onOffer={(relicId) => openSaleOffer(rival.id, relicId)} />}
+      {negotiation && negotiationBuyer && negotiationSeller && negotiationRelic && <NegotiationModal key={`${negotiation.kind}-${negotiation.sellerId}-${negotiation.relicId}-${negotiation.amount}`} offer={negotiation} buyer={negotiationBuyer} seller={negotiationSeller} relic={negotiationRelic} onClose={() => setNegotiation(null)} onSubmit={submitTradeProposal} />}
+      {pendingForHuman && game.pendingOffer && pendingBuyer && pendingSeller && pendingRelic && <TradeResponseModal key={`${game.pendingOffer.proposerId}-${game.pendingOffer.responderId}-${game.pendingOffer.amount}`} offer={game.pendingOffer} buyer={pendingBuyer} seller={pendingSeller} relic={pendingRelic} humanId={human!.id} onAccept={acceptPendingTrade} onCounter={counterPendingTrade} onDecline={cancelPendingTrade} />}
+      {waitingOnHuman && game.pendingOffer && pendingBuyer && pendingSeller && pendingRelic && <TradeWaitingToast offer={game.pendingOffer} buyer={pendingBuyer} seller={pendingSeller} relic={pendingRelic} onWithdraw={cancelPendingTrade} />}
     </main>
   );
 }
@@ -1419,23 +1500,33 @@ function TalentActionModal({ talent, player, players, onClose, onTarget }: { tal
   return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="target-modal"><button className="modal-close" onClick={onClose}>×</button><span className="modal-relic-icon">{talent.icon}</span><p className="eyebrow">Talento ativo</p><h2>{talent.name}</h2><p>{talent.description}</p><div className="target-list">{talent.activeType === "bribe" ? players.filter((target) => target.id !== player.id).map((target) => <button key={target.id} onClick={() => onTarget(target.id)}><span>{target.character.sigil}</span><div><strong>{target.character.name}</strong><small>Retirar do próximo leilão · custo 3 ●</small></div></button>) : cursedRelics.length === 0 ? <div className="no-target">Você não possui uma maldição ativa.</div> : cursedRelics.map((relic, index) => <button key={`${relic.id}-${index}`} onClick={() => onTarget(relic.id)}><span>{relic.icon}</span><div><strong>{relic.name}</strong><small>{relic.curse?.name} · custo 3 ●</small></div></button>)}</div></section></div>;
 }
 
-function RivalModal({ rival, buyer, enabled, onClose, onNegotiate }: { rival: Player; buyer: Player; enabled: boolean; onClose: () => void; onNegotiate: (id: string) => void; }) {
-  const limit = hasSkill(buyer, "smuggler") ? 2 : 1;
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rival-modal"><button className="modal-close" onClick={onClose}>×</button><div className="rival-modal-head"><span>{rival.character.sigil}</span><div><p className="eyebrow">Museu rival</p><h2>{rival.character.name}</h2><small>Faça uma oferta. O rival pode aceitar ou mandar uma contraproposta.</small></div></div><div className="trade-status"><span>Suas moedas: <b>● {buyer.gold}</b></span><span>Compras no ato: <b>{buyer.tradesAct}/{limit}</b></span></div><div className="rival-relics">{rival.inventory.length === 0 ? <div className="no-target">Este Museu ainda está vazio.</div> : rival.inventory.map((relic,index) => { const estimate = askingPrice(relic,buyer); const canTrade = enabled && buyer.tradesAct < limit && buyer.gold > 0; return <article key={`${relic.id}-${index}`}><span>{relic.icon}</span><div><strong>{relic.name}</strong><small>✦ {relic.prestige} · preço esperado por volta de {estimate} ●</small><p>{relic.power.description}</p></div><button disabled={!canTrade} onClick={() => onNegotiate(relic.id)}>{enabled ? canTrade ? "Fazer oferta" : "Limite atingido" : "Aguarde o leilão"}</button></article>; })}</div></section></div>;
+function RivalModal({ rival, player, enabled, busy, onClose, onRequest, onOffer }: { rival: Player; player: Player; enabled: boolean; busy: boolean; onClose: () => void; onRequest: (id: string) => void; onOffer: (id: string) => void; }) {
+  const [direction, setDirection] = useState<"request" | "offer">("request");
+  const buyer = direction === "request" ? player : rival;
+  const purchaseLimit = tradeLimit(buyer);
+  const catalogue = direction === "request" ? rival.inventory : player.inventory;
+  const canTrade = enabled && buyer.tradesAct < purchaseLimit && buyer.gold > 0;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rival-modal"><button className="modal-close" onClick={onClose}>×</button><div className="rival-modal-head"><span>{rival.character.sigil}</span><div><p className="eyebrow">Mercado entre Museus</p><h2>Negociar com {rival.character.name}</h2><small>Peça uma relíquia do rival ou ofereça uma peça sua. Toda proposta aceita contraproposta.</small></div></div><nav className="trade-direction-tabs"><button className={direction === "request" ? "active" : ""} onClick={() => setDirection("request")}><span>⇠</span><strong>Pedir do rival</strong><small>Você oferece ouro</small></button><button className={direction === "offer" ? "active" : ""} onClick={() => setDirection("offer")}><span>⇢</span><strong>Oferecer ao rival</strong><small>Você define o preço</small></button></nav><div className="trade-status"><span>{direction === "request" ? "Suas moedas" : `Moedas de ${rival.username}`}: <b>● {buyer.gold}</b></span><span>Compras de {buyer.isHuman ? "você" : rival.username} no ato: <b>{buyer.tradesAct}/{purchaseLimit}</b></span></div>{busy && <div className="trade-busy-note">Existe outra proposta aguardando resposta. Conclua ou retire aquela negociação primeiro.</div>}<div className="rival-relics trade-catalogue">{catalogue.length === 0 ? <div className="no-target">{direction === "request" ? "Este Museu ainda está vazio." : "Você ainda não possui uma relíquia para oferecer."}</div> : catalogue.map((relic,index) => { const estimate = Math.min(buyer.gold, askingPrice(relic,buyer)); return <article key={`${direction}-${relic.id}-${index}`}><span>{relic.icon}</span><div><strong>{relic.name}</strong><small>✦ {relic.prestige} · referência de preço {estimate} ●</small><p>{direction === "request" ? relic.power.description : `A venda rende +${salePrestige(relic, player)} Prestígio para você.`}</p></div><button disabled={!canTrade} onClick={() => direction === "request" ? onRequest(relic.id) : onOffer(relic.id)}>{busy ? "Proposta em curso" : !enabled ? "Aguarde o leilão" : buyer.tradesAct >= purchaseLimit ? "Limite atingido" : buyer.gold <= 0 ? "Sem ouro disponível" : direction === "request" ? "Pedir este item" : "Oferecer este item"}</button></article>; })}</div></section></div>;
 }
 
-function NegotiationModal({ offer, buyer, seller, relic, onClose, onSubmit }: { offer: { amount: number; status: "draft" | "counter"; message: string }; buyer: Player; seller: Player; relic: OwnedRelic; onClose: () => void; onSubmit: (amount: number) => void; }) {
+function NegotiationModal({ offer, buyer, seller, relic, onClose, onSubmit }: { offer: NegotiationDraft; buyer: Player; seller: Player; relic: OwnedRelic; onClose: () => void; onSubmit: (amount: number) => void; }) {
   const [amount, setAmount] = useState(offer.amount);
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="negotiation-modal"><button className="modal-close" onClick={onClose}>×</button><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">Negociação com {seller.character.name}</p><h2>{relic.name}</h2><p className="negotiation-message">{offer.message}</p><div className="offer-summary"><span>Você possui <b>{buyer.gold} ●</b></span><span>O vendedor ganha <b>+{salePrestige(relic, seller)} ✦</b> se aceitar</span></div><label className="gold-input">Sua oferta<input type="number" min={1} max={buyer.gold} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /><span>●</span></label><button className="primary-button full" disabled={amount < 1 || amount > buyer.gold} onClick={() => onSubmit(amount)}>{offer.status === "counter" && amount === offer.amount ? `Aceitar por ${amount} moedas` : "Enviar oferta"}</button><button className="text-button full" onClick={onClose}>Desistir</button></section></div>;
+  const selling = offer.kind === "sale-offer";
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="negotiation-modal"><button className="modal-close" onClick={onClose}>×</button><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">{selling ? `Oferecer a ${buyer.character.name}` : `Pedir de ${seller.character.name}`}</p><h2>{relic.name}</h2><p className="negotiation-message">{offer.message}</p><div className="offer-summary"><span>{selling ? `${buyer.username} possui` : "Você pode gastar"}<b>{buyer.gold} ●</b></span><span>Prestígio da venda <b>+{salePrestige(relic, seller)} ✦</b></span></div><label className="gold-input">{selling ? "Preço pedido" : "Quanto oferecer"}<input type="number" min={1} max={buyer.gold} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /><span>●</span></label><button className="primary-button full" disabled={amount < 1 || amount > buyer.gold} onClick={() => onSubmit(amount)}>{selling ? `Oferecer por ${amount} moedas` : `Pedir por ${amount} moedas`}</button><button className="text-button full" onClick={onClose}>Desistir</button></section></div>;
 }
 
-function IncomingOfferModal({ offer, buyer, seller, relic, onAccept, onCounter, onDecline }: { offer: TradeOffer; buyer: Player; seller: Player; relic: OwnedRelic; onAccept: () => void; onCounter: (amount: number) => void; onDecline: () => void; }) {
-  const [amount, setAmount] = useState(Math.min(buyer.gold, offer.amount + 2));
-  return <div className="modal-backdrop priority" role="dialog" aria-modal="true"><section className="negotiation-modal incoming"><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">Proposta recebida</p><h2>{buyer.character.name} quer {relic.name}</h2><p className="negotiation-message">{offer.message}</p><div className="sale-preview"><div><span>Você recebe</span><strong>+{offer.amount} ●</strong></div><div><span>Prestígio da venda</span><strong>+{salePrestige(relic, seller)} ✦</strong></div></div><button className="primary-button full" onClick={onAccept}>Aceitar {offer.amount} moedas</button><label className="gold-input">Contraproposta<input type="number" min={1} max={buyer.gold} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /><span>●</span></label><button className="counter-button" disabled={amount < 1 || amount > buyer.gold} onClick={() => onCounter(amount)}>Enviar contraproposta</button><button className="text-button full" onClick={onDecline}>Recusar venda</button></section></div>;
+function TradeResponseModal({ offer, buyer, seller, relic, humanId, onAccept, onCounter, onDecline }: { offer: TradeOffer; buyer: Player; seller: Player; relic: OwnedRelic; humanId: string; onAccept: () => void; onCounter: (amount: number) => void; onDecline: () => void; }) {
+  const humanIsBuyer = humanId === buyer.id;
+  const suggestedCounter = humanIsBuyer ? Math.max(1, Math.min(buyer.gold, offer.amount - 1)) : Math.max(1, Math.min(buyer.gold, offer.amount + 2));
+  const [amount, setAmount] = useState(suggestedCounter);
+  const canBuy = buyer.gold >= offer.amount && buyer.tradesAct < tradeLimit(buyer);
+  const heading = offer.status === "counter" ? "Contraproposta recebida" : humanIsBuyer ? "Relíquia oferecida a você" : "Pedido pela sua relíquia";
+  return <div className="modal-backdrop priority" role="dialog" aria-modal="true"><section className="negotiation-modal incoming"><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">{heading}</p><h2>{humanIsBuyer ? `${seller.character.name} oferece ${relic.name}` : `${buyer.character.name} quer ${relic.name}`}</h2><p className="negotiation-message">{offer.message}</p><div className="sale-preview">{humanIsBuyer ? <><div><span>Você paga</span><strong>−{offer.amount} ●</strong></div><div><span>Você recebe</span><strong>{relic.name}</strong></div></> : <><div><span>Você recebe</span><strong>+{offer.amount} ●</strong></div><div><span>Prestígio da venda</span><strong>+{salePrestige(relic, seller)} ✦</strong></div></>}</div><button className="primary-button full" disabled={!canBuy} onClick={onAccept}>{canBuy ? `Aceitar por ${offer.amount} moedas` : buyer.tradesAct >= tradeLimit(buyer) ? "Limite de compras atingido" : "O comprador não possui esse ouro"}</button><label className="gold-input">Contraproposta<input type="number" min={1} max={buyer.gold} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /><span>●</span></label><button className="counter-button" disabled={amount < 1 || amount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)} onClick={() => onCounter(amount)}>Enviar contraproposta</button><button className="text-button full" onClick={onDecline}>Recusar e encerrar</button></section></div>;
 }
 
-function CounterOfferModal({ offer, seller, relic, onAccept, onDecline }: { offer: TradeOffer; seller: Player; relic: OwnedRelic; onAccept: () => void; onDecline: () => void; }) {
-  return <div className="modal-backdrop priority" role="dialog" aria-modal="true"><section className="negotiation-modal incoming"><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">Contraproposta recebida</p><h2>{seller.username} pede {offer.amount} moedas</h2><p className="negotiation-message">{offer.message}</p><div className="sale-preview"><div><span>Você paga</span><strong>−{offer.amount} ●</strong></div><div><span>Você recebe</span><strong>{relic.name}</strong></div></div><button className="primary-button full" onClick={onAccept}>Aceitar contraproposta</button><button className="text-button full" onClick={onDecline}>Recusar e encerrar</button></section></div>;
+function TradeWaitingToast({ offer, buyer, seller, relic, onWithdraw }: { offer: TradeOffer; buyer: Player; seller: Player; relic: OwnedRelic; onWithdraw: () => void; }) {
+  const recipient = tradeResponderId(offer) === buyer.id ? buyer : seller;
+  return <aside className="trade-waiting-toast" aria-live="polite"><span className="trade-toast-icon">⌛</span><div><small>{offer.status === "counter" ? "Contraproposta enviada" : "Proposta enviada"}</small><strong>Aguardando {recipient.username}</strong><p>{relic.name} · {offer.amount} moedas</p></div><button onClick={onWithdraw}>Retirar</button></aside>;
 }
 
 function CancelGameModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void; }) {

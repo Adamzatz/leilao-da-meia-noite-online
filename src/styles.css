@@ -954,8 +954,16 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .rival-modal-head { display: grid; grid-template-columns: 58px 1fr; gap: 12px; align-items: center; }
 .rival-modal-head > span { width: 56px; height: 62px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold-bright); font-size: 1.8rem; }
 .rival-modal-head small { color: #71695c; font-size: .62rem; }
+.trade-direction-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 18px 0 10px; }
+.trade-direction-tabs button { display: grid; grid-template-columns: 28px 1fr; column-gap: 7px; padding: 10px; border: 1px solid rgba(185,149,75,.18); color: #756b5b; background: rgba(0,0,0,.22); text-align: left; cursor: pointer; }
+.trade-direction-tabs button > span { grid-row: 1 / 3; align-self: center; color: #806f43; font-size: 1.15rem; }
+.trade-direction-tabs strong { color: #a99a78; font-size: .62rem; font-weight: 400; text-transform: uppercase; letter-spacing: .07em; }
+.trade-direction-tabs small { margin-top: 2px; color: #60594e; font-size: .51rem; }
+.trade-direction-tabs button.active { border-color: rgba(226,194,100,.55); background: linear-gradient(135deg, rgba(117,76,24,.26), rgba(74,28,32,.18)); }
+.trade-direction-tabs button.active > span, .trade-direction-tabs button.active strong { color: var(--gold-bright); }
 .trade-status { display: flex; justify-content: space-between; margin: 18px 0 10px; padding: 9px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #766d5f; font-size: .62rem; }
 .trade-status b { color: var(--gold-bright); font-weight: 400; }
+.trade-busy-note { margin-bottom: 9px; padding: 8px 10px; border: 1px solid rgba(164,83,61,.35); color: #a7836d; background: rgba(83,38,28,.16); font-size: .57rem; line-height: 1.4; }
 .rival-relics { display: grid; gap: 7px; }
 .rival-relics article { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; padding: 10px; border: 1px solid rgba(185,149,75,.17); background: rgba(0,0,0,.2); }
 .rival-relics article > span { width: 38px; height: 43px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold-bright); }
@@ -1015,6 +1023,8 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
   .rival-relics button { grid-column: 1 / -1; width: 100%; }
   .target-modal, .rival-modal { padding: 28px 18px; }
   .trade-status { flex-direction: column; gap: 5px; }
+  .trade-direction-tabs { grid-template-columns: 1fr; }
+  .trade-waiting-toast { right: 14px; bottom: 14px; }
   .legend-options { grid-template-columns: 1fr; }
 }
 
@@ -1132,6 +1142,13 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .sale-preview strong { margin-top: 5px; color: var(--gold-bright); font-size: 1rem; font-weight: 400; }
 .counter-button { width: 100%; padding: 10px; border: 1px solid var(--gold-dim); color: #c5ae70; background: rgba(185,149,75,.07); font: inherit; font-size: .59rem; text-transform: uppercase; letter-spacing: .08em; cursor: pointer; }
 .modal-backdrop.priority { z-index: 70; }
+.trade-waiting-toast { position: fixed; right: 18px; bottom: 18px; z-index: 45; width: min(390px, calc(100vw - 28px)); display: grid; grid-template-columns: 42px 1fr auto; gap: 10px; align-items: center; padding: 12px; border: 1px solid rgba(211,174,87,.42); background: linear-gradient(135deg, rgba(47,30,20,.97), rgba(20,12,14,.98)); box-shadow: 0 18px 55px rgba(0,0,0,.55); }
+.trade-toast-icon { width: 40px; height: 44px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold-bright); font-size: 1.1rem; }
+.trade-waiting-toast > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.trade-waiting-toast small { color: #897850; font-size: .48rem; text-transform: uppercase; letter-spacing: .09em; }
+.trade-waiting-toast strong { overflow: hidden; color: #d2c09a; font-size: .67rem; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.trade-waiting-toast p { overflow: hidden; margin: 0; color: #746a5b; font-size: .55rem; text-overflow: ellipsis; white-space: nowrap; }
+.trade-waiting-toast button { padding: 7px 9px; border: 1px solid rgba(185,149,75,.25); color: #a99463; background: transparent; font-size: .52rem; text-transform: uppercase; cursor: pointer; }
 .relic-detail-modal.fused-detail { border-color: #d3ae57; background: radial-gradient(circle at 50% 0, rgba(178,117,30,.25), transparent 38%), #100c0c; }
 
 .fusion-backdrop { z-index: 65; }

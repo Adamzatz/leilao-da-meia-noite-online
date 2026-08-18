@@ -7,14 +7,18 @@ import {
   RELICS,
   TALENTS,
   artifactLimit,
+  acceptTradeOffer,
   beginAuction,
   calculateScore,
+  cancelTradeOffer,
   completeTrade,
+  counterTradeOffer,
   distributeIncome,
   executeRelicAction,
   executeTalentAction,
   intrigueProgress,
   passTurn,
+  proposeTrade,
   type GameState,
   type Player,
 } from "../src/App.tsx";
@@ -128,6 +132,61 @@ test("Língua de Prata e Carta do Duque devolvem moedas numa compra real", () =>
   assert.equal(result.players[1].relicsSold, 1);
   assert.deepEqual(result.players[0].tradePartners, [seller.id]);
   assert.deepEqual(result.players[1].tradePartners, [buyer.id]);
+});
+
+test("o vendedor pode oferecer uma relíquia diretamente a um rival", () => {
+  const relic = structuredClone(RELICS.find((item) => item.id === "ivory-mask")!);
+  const buyer = player("buyer", { gold: 10 });
+  const seller = player("seller", { gold: 0, inventory: [relic] });
+  const offered = proposeTrade(game([buyer, seller]), seller.id, buyer.id, seller.id, relic.id, 6, "sale-offer");
+
+  assert.equal(offered.pendingOffer?.kind, "sale-offer");
+  assert.equal(offered.pendingOffer?.proposerId, seller.id);
+  assert.equal(offered.pendingOffer?.responderId, buyer.id);
+  const accepted = acceptTradeOffer(offered, buyer.id);
+  assert.equal(accepted.players.find((candidate) => candidate.id === buyer.id)?.gold, 4);
+  assert.equal(accepted.players.find((candidate) => candidate.id === buyer.id)?.inventory[0].id, relic.id);
+  assert.equal(accepted.players.find((candidate) => candidate.id === seller.id)?.gold, 6);
+  assert.equal(accepted.players.find((candidate) => candidate.id === seller.id)?.prestigeBonus, 1);
+  assert.equal(accepted.pendingOffer, null);
+});
+
+test("pedido de compra aceita contrapropostas alternadas entre os jogadores", () => {
+  const relic = structuredClone(RELICS.find((item) => item.id === "widow-ring")!);
+  const buyer = player("buyer", { gold: 10 });
+  const seller = player("seller", { gold: 0, inventory: [relic] });
+  const requested = proposeTrade(game([buyer, seller]), buyer.id, buyer.id, seller.id, relic.id, 4, "buy-request");
+  const countered = counterTradeOffer(requested, seller.id, 7);
+
+  assert.equal(countered.pendingOffer?.status, "counter");
+  assert.equal(countered.pendingOffer?.amount, 7);
+  assert.equal(countered.pendingOffer?.responderId, buyer.id);
+  const accepted = acceptTradeOffer(countered, buyer.id);
+  assert.equal(accepted.players.find((candidate) => candidate.id === buyer.id)?.gold, 3);
+  assert.equal(accepted.players.find((candidate) => candidate.id === seller.id)?.gold, 7);
+});
+
+test("somente participantes podem retirar uma proposta em andamento", () => {
+  const relic = structuredClone(RELICS.find((item) => item.id === "ivory-mask")!);
+  const buyer = player("buyer");
+  const seller = player("seller", { inventory: [relic] });
+  const outsider = player("outsider");
+  const offered = proposeTrade(game([buyer, seller, outsider]), seller.id, buyer.id, seller.id, relic.id, 5, "sale-offer");
+
+  assert.equal(cancelTradeOffer(offered, outsider.id).pendingOffer?.relicId, relic.id);
+  assert.equal(cancelTradeOffer(offered, seller.id).pendingOffer, null);
+});
+
+test("a proposta é encerrada se o item sair do Museu antes do aceite", () => {
+  const apple = structuredClone(RELICS.find((item) => item.id === "golden-apple")!);
+  const buyer = player("buyer");
+  const seller = player("seller", { inventory: [apple] });
+  const rival = player("rival");
+  const offered = proposeTrade(game([buyer, seller, rival]), seller.id, buyer.id, seller.id, apple.id, 5, "sale-offer");
+  const transferred = executeRelicAction(offered, seller.id, apple.id, rival.id);
+
+  assert.equal(transferred.pendingOffer, null);
+  assert.equal(transferred.players.find((candidate) => candidate.id === rival.id)?.inventory.some((item) => item.id === apple.id), true);
 });
 
 test("Rosto que Nunca Existiu afeta o Museu rival no estado multiplayer", () => {
