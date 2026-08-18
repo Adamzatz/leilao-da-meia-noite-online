@@ -814,6 +814,7 @@ export default function Home() {
   const [connectionState, setConnectionState] = useState<"connecting" | "online" | "offline">("connecting");
   const [onlineMessage, setOnlineMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [musicVolume, setMusicVolume] = useState(22);
   const [detailRelicId, setDetailRelicId] = useState<string | null>(null);
@@ -891,6 +892,14 @@ export default function Home() {
         if (message.type === "room:left") {
           setOnlineRoom(null);
           setGame((current) => ({ ...EMPTY_GAME, phase: "lobby" }));
+          return;
+        }
+        if (message.type === "room:cancelled") {
+          setOnlineRoom(null);
+          setCancelConfirmOpen(false);
+          gameRef.current = EMPTY_GAME;
+          setGame(EMPTY_GAME);
+          setOnlineMessage(String(message.message ?? "A partida foi cancelada."));
           return;
         }
         if (message.type === "error") setOnlineMessage(String(message.message ?? "O Anfitrião recusou a ação."));
@@ -1163,6 +1172,10 @@ export default function Home() {
 
   const leaveRoom = () => sendSocket({ type: "room:leave" });
   const returnFromResults = () => sendSocket({ type: "room:return-to-lobby" });
+  const cancelMatch = () => {
+    if (!profile || onlineRoom?.hostUserId !== profile.id) return;
+    sendSocket({ type: "room:cancel" });
+  };
   const isRoomHost = Boolean(profile && onlineRoom?.hostUserId === profile.id);
 
   const human = game.players.find((player) => player.isHuman);
@@ -1216,7 +1229,7 @@ export default function Home() {
   const canManageMuseum = game.status === "announcement" || game.status === "awarded";
   return (
     <main className="game-screen">
-      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % 3) + 1} de 3</span></div><div className="header-progress">{[1,2,3,4].map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button></div></header>
+      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % 3) + 1} de 3</span></div><div className="header-progress">{[1,2,3,4].map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button>{isRoomHost && <button className="cancel-match-button" onClick={() => setCancelConfirmOpen(true)}>Cancelar partida</button>}</div></header>
       <section className="players-rail">{game.players.map((player) => <PlayerSeat key={player.id} player={player} isTurn={auction?.turnId === player.id} isLeader={auction?.highBidder === player.id} onClick={() => !player.isHuman && setRivalId(player.id)} />)}</section>
 
       <section className="auction-table redesigned">
@@ -1235,6 +1248,7 @@ export default function Home() {
       </section>
 
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {cancelConfirmOpen && <CancelGameModal onClose={() => setCancelConfirmOpen(false)} onConfirm={cancelMatch} />}
       {detailRelic && <RelicDetailModal relic={detailRelic} player={human!} status={game.status} enabled={canManageMuseum} onClose={() => setDetailRelicId(null)} onUse={() => { setDetailRelicId(null); if (detailRelic.power.target) setActionRelicId(detailRelic.id); else { commitGame((current) => executeRelicAction(current, human!.id, detailRelic.id)); playTone("win"); } }} />}
       {actionRelic && <ActionTargetModal relic={actionRelic} actor={human!} game={game} onClose={() => setActionRelicId(null)} onTarget={(targetId) => { commitGame((current) => executeRelicAction(current, human!.id, actionRelic.id, targetId)); setActionRelicId(null); playTone("win"); }} />}
       {fusionOpen && <FusionModal player={human!} recipes={fusionRecipes} enabled={canManageMuseum} onClose={() => setFusionOpen(false)} onFuse={(recipeId) => { commitGame((current) => performFusion(current, human!.id, recipeId)); setFusionOpen(false); playTone("win"); }} />}
@@ -1422,6 +1436,10 @@ function IncomingOfferModal({ offer, buyer, seller, relic, onAccept, onCounter, 
 
 function CounterOfferModal({ offer, seller, relic, onAccept, onDecline }: { offer: TradeOffer; seller: Player; relic: OwnedRelic; onAccept: () => void; onDecline: () => void; }) {
   return <div className="modal-backdrop priority" role="dialog" aria-modal="true"><section className="negotiation-modal incoming"><span className="modal-relic-icon">{relic.icon}</span><p className="eyebrow">Contraproposta recebida</p><h2>{seller.username} pede {offer.amount} moedas</h2><p className="negotiation-message">{offer.message}</p><div className="sale-preview"><div><span>Você paga</span><strong>−{offer.amount} ●</strong></div><div><span>Você recebe</span><strong>{relic.name}</strong></div></div><button className="primary-button full" onClick={onAccept}>Aceitar contraproposta</button><button className="text-button full" onClick={onDecline}>Recusar e encerrar</button></section></div>;
+}
+
+function CancelGameModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: () => void; }) {
+  return <div className="modal-backdrop priority" role="dialog" aria-modal="true" aria-labelledby="cancel-game-title"><section className="cancel-game-modal"><button className="modal-close" onClick={onClose}>×</button><span className="cancel-game-icon">♜</span><p className="eyebrow">Encerrar o baile</p><h2 id="cancel-game-title">Cancelar esta partida?</h2><p>Todos os convidados serão retirados da sala e voltarão ao menu principal. O andamento desta partida será perdido.</p><div className="cancel-game-actions"><button className="text-button" onClick={onClose}>Continuar jogando</button><button className="danger-button" onClick={onConfirm}>Sim, cancelar para todos</button></div></section></div>;
 }
 
 function RulesModal({ onClose }: { onClose: () => void; }) {

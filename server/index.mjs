@@ -444,6 +444,18 @@ webSocketServer.on("connection", (socket, _request, user) => {
       if (!room) return sendError(socket, "Você não está em uma sala.", "NO_ROOM");
       const member = room.members.find((candidate) => candidate.userId === user.id);
 
+      if (message.type === "room:cancel") {
+        if (room.hostUserId !== user.id) return sendError(socket, "Somente o anfitrião pode cancelar a partida.", "HOST_ONLY");
+        const participantIds = new Set(room.members.map((candidate) => candidate.userId));
+        store.data.rooms = store.data.rooms.filter((candidate) => candidate.id !== room.id);
+        await store.save();
+        for (const client of clients.values()) {
+          if (participantIds.has(client.userId)) send(client.socket, { type: "room:cancelled", message: "O anfitrião cancelou a partida. Todos voltaram ao menu principal." });
+        }
+        broadcastLobby();
+        return;
+      }
+
       if (message.type === "room:leave") {
         if (room.status === "playing") return sendError(socket, "Reconecte-se à partida; não é possível abandonar uma mesa em andamento.");
         room.members = room.members.filter((candidate) => candidate.userId !== user.id);

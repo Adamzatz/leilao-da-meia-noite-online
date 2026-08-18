@@ -111,6 +111,13 @@ test("three real players can create, fill, ready and synchronize a room", async 
   clients[0].socket.send(JSON.stringify({ type: "game:update", expectedVersion: 5, gameState: { ...awarded.room.gameState, status: "intrigueReveal" } }));
   const revealed = await clients[1].waitFor((message) => message.type === "room:snapshot" && message.room.version === 6);
   assert.ok(revealed.room.gameState.players.every((player) => player.intrigueId), "a revelação final abre todas as intrigas");
+
+  clients[1].socket.send(JSON.stringify({ type: "room:cancel" }));
+  const unauthorizedCancel = await clients[1].waitFor((message) => message.type === "error" && /anfitrião/i.test(message.message));
+  assert.equal(unauthorizedCancel.code, "HOST_ONLY");
+  clients[0].socket.send(JSON.stringify({ type: "room:cancel" }));
+  const cancelled = await Promise.all(clients.map((client) => client.waitFor((message) => message.type === "room:cancelled")));
+  assert.ok(cancelled.every((message) => /menu principal/i.test(message.message)));
   clients.forEach((client) => client.socket.close());
 });
 
