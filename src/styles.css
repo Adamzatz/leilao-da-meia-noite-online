@@ -135,6 +135,17 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .library-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .library-card { min-width: 0; position: relative; padding: 17px; border: 1px solid rgba(185,149,75,.19); background: linear-gradient(150deg, rgba(32,21,20,.76), rgba(7,6,6,.94) 62%); box-shadow: inset 0 0 32px rgba(0,0,0,.14); }
 .library-card:hover { border-color: rgba(225,195,111,.42); }
+.library-relic-layout { min-width: 0; display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 16px; align-items: start; }
+.relic-artwork-library { width: 100%; aspect-ratio: 4 / 5; align-self: start; border: 1px solid rgba(205,168,77,.46); background: #090707; box-shadow: 0 14px 30px rgba(0,0,0,.36), inset 0 0 0 4px rgba(205,168,77,.04); }
+.relic-artwork-library.has-image { padding: 3px; }
+.relic-artwork-library.is-placeholder > span { font-size: 2.7rem; }
+.library-card.cursed .relic-artwork-library { border-color: rgba(161,72,78,.58); }
+.library-relic-content { min-width: 0; }
+.library-relic-content > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.library-relic-content > header > div { min-width: 0; }
+.library-relic-content > header small { display: block; overflow: hidden; color: #8c7b59; font-size: .49rem; letter-spacing: .06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.library-relic-content > header p { overflow: hidden; margin: 0; color: #6e6659; font-size: .54rem; font-style: italic; text-overflow: ellipsis; white-space: nowrap; }
+.library-relic-content > header > b { color: var(--gold-bright); font-size: .68rem; font-weight: 400; white-space: nowrap; }
 .library-card.cursed { border-color: rgba(137,55,62,.37); background: linear-gradient(150deg, rgba(51,21,24,.65), rgba(7,6,6,.95) 62%); }
 .library-card.forbidden { border-color: rgba(224,195,105,.43); background: radial-gradient(circle at 10% 0, rgba(181,118,35,.13), transparent 30%), linear-gradient(150deg, rgba(37,25,20,.82), rgba(7,6,6,.96)); }
 .library-card.creator { border-color: rgba(248,215,112,.78); background: radial-gradient(circle at 12% 0, rgba(246,190,55,.28), transparent 42%), radial-gradient(circle at 90% 100%, rgba(143,82,189,.16), transparent 46%), linear-gradient(150deg, rgba(50,31,19,.94), rgba(7,6,8,.98)); box-shadow: inset 0 0 44px rgba(228,174,49,.12), 0 0 24px rgba(208,156,49,.12); }
@@ -156,10 +167,10 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .library-power p { margin: 5px 0 0; color: #978b77; font-size: .61rem; line-height: 1.5; }
 .library-curse { margin-top: 8px; padding: 8px 10px; border: 1px solid rgba(142,52,60,.29); color: #9e686b; background: rgba(91,26,33,.11); font-size: .53rem; line-height: 1.4; }
 .library-curse strong { color: #bd787c; font-weight: 400; }
-.library-card > footer { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
-.library-card > footer span { padding: 3px 6px; border: 1px solid rgba(185,149,75,.17); color: #776b54; font-size: .47rem; text-transform: uppercase; letter-spacing: .07em; }
-.library-card > footer span.danger { border-color: rgba(145,52,59,.28); color: #a56669; }
-.library-card > footer span.creator-tag { border-color: rgba(235,193,79,.5); color: #efd782; background: rgba(155,103,25,.13); }
+.library-card > footer, .library-relic-content > footer { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 11px; }
+.library-card > footer span, .library-relic-content > footer span { padding: 3px 6px; border: 1px solid rgba(185,149,75,.17); color: #776b54; font-size: .47rem; text-transform: uppercase; letter-spacing: .07em; }
+.library-card > footer span.danger, .library-relic-content > footer span.danger { border-color: rgba(145,52,59,.28); color: #a56669; }
+.library-card > footer span.creator-tag, .library-relic-content > footer span.creator-tag { border-color: rgba(235,193,79,.5); color: #efd782; background: rgba(155,103,25,.13); }
 .library-components { display: flex; align-items: stretch; gap: 5px; margin: 13px 0 8px; padding: 9px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .library-components > span { min-width: 0; flex: 1; display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: center; position: relative; }
 .library-components i { width: 21px; height: 24px; display: grid; place-items: center; border: 1px solid rgba(185,149,75,.2); color: var(--gold); font-style: normal; font-size: .64rem; }
@@ -250,6 +261,14 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .relic-stage::before { left: -15%; }.relic-stage::after { right: -15%; transform: rotate(-5deg) scaleX(-1); }
 .relic-frame { width: 116px; height: 136px; display: grid; place-items: center; position: relative; z-index: 1; margin-bottom: 14px; border: 1px solid var(--gold); color: var(--gold-bright); background: radial-gradient(circle, rgba(185,149,75,.12), rgba(10,8,8,.95) 70%); clip-path: polygon(50% 0, 91% 14%, 100% 70%, 72% 100%, 28% 100%, 0 70%, 9% 14%); box-shadow: inset 0 0 0 5px rgba(185,149,75,.05); }
 .relic-frame.cursed { border-color: #a34d52; color: #d78f87; background: radial-gradient(circle, rgba(125,26,30,.25), rgba(8,7,7,.95) 70%); }
+.relic-artwork { display: grid; place-items: center; overflow: hidden; color: var(--gold-bright); background: radial-gradient(circle, rgba(185,149,75,.12), rgba(8,7,7,.96) 72%); }
+.relic-artwork img { width: 100%; height: 100%; display: block; object-fit: cover; user-select: none; }
+.relic-artwork.is-placeholder > span { text-shadow: 0 0 25px currentColor; }
+.relic-artwork-auction { width: 100%; height: 100%; background: transparent; }
+.relic-artwork-auction.is-placeholder > span { font-size: 3.5rem; }
+.relic-frame.has-art { width: 184px; height: 230px; overflow: hidden; padding: 5px; border-color: #cda84d; clip-path: none; background: #050404; box-shadow: 0 17px 45px rgba(0,0,0,.48), inset 0 0 0 1px rgba(245,213,122,.14); }
+.relic-frame.has-art.cursed { border-color: #a84f55; box-shadow: 0 17px 45px rgba(0,0,0,.48), 0 0 24px rgba(133,39,45,.15), inset 0 0 0 1px rgba(214,104,109,.12); }
+.relic-frame.has-art .relic-number { left: 5px; right: 5px; bottom: 5px; padding: 16px 5px 7px; color: #f1dfaa; background: linear-gradient(180deg, transparent, rgba(5,4,4,.94)); text-shadow: 0 1px 5px #000; }
 .relic-icon { font-size: 3.5rem; text-shadow: 0 0 25px currentColor; }
 .relic-number { position: absolute; bottom: 13px; font-size: .47rem; letter-spacing: .12em; }
 .relic-epithet { z-index: 1; margin: 0 0 6px; color: var(--gold); font-size: .62rem; text-transform: uppercase; letter-spacing: .13em; }
@@ -767,6 +786,7 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .new-stage { min-height: 670px; }
 .new-stage .relic-frame { margin-top: 6px; }
 .relic-frame.legendary { width: 132px; height: 150px; border-color: #efe2ab; color: #fff1ae; background: radial-gradient(circle, rgba(244,207,102,.22), rgba(10,8,8,.97) 68%); animation: pulse-gold 1.7s infinite; }
+.relic-frame.has-art.legendary { width: 194px; height: 242px; background: #050404; }
 .tag-row .legend-tag { border-color: #e9cf77; color: #ecd988; }
 .effect-box.active-preview { margin-bottom: 13px; }
 .effect-box.active-preview small { color: #625b50; font-size: .52rem; }
@@ -1076,9 +1096,13 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .museum-panel { display: flex; flex-direction: column; overflow: hidden; }
 .museum-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 7px; flex: 1; overflow: auto; scrollbar-width: thin; }
 .museum-grid .empty-museum { grid-column: 1 / -1; }
-.museum-tile { min-width: 0; min-height: 62px; display: grid; grid-template-columns: 35px minmax(0, 1fr) auto; gap: 7px; align-items: center; padding: 8px; border: 1px solid rgba(185,149,75,.17); color: inherit; background: linear-gradient(145deg, rgba(35,24,22,.65), rgba(8,7,7,.92)); text-align: left; cursor: pointer; }
+.museum-tile { min-width: 0; min-height: 69px; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 7px; align-items: center; padding: 7px; border: 1px solid rgba(185,149,75,.17); color: inherit; background: linear-gradient(145deg, rgba(35,24,22,.65), rgba(8,7,7,.92)); text-align: left; cursor: pointer; }
 .museum-tile:hover { border-color: rgba(224,195,105,.5); transform: translateY(-1px); }
 .museum-tile.cursed { border-color: rgba(151,62,69,.43); background: linear-gradient(145deg, rgba(61,24,28,.45), rgba(8,7,7,.93)); }
+.museum-tile.has-art { border-color: rgba(205,168,77,.31); background: linear-gradient(145deg, rgba(46,31,23,.76), rgba(8,7,7,.94)); }
+.relic-artwork-museum { width: 42px; aspect-ratio: 4 / 5; border: 1px solid rgba(185,149,75,.35); background: #080606; }
+.relic-artwork-museum.has-image { padding: 1px; }
+.relic-artwork-museum.is-placeholder > span { font-size: 1rem; }
 .tile-icon { width: 34px; height: 40px; display: grid; place-items: center; border: 1px solid var(--gold-dim); color: var(--gold-bright); font-size: 1rem; }
 .tile-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tile-copy strong { overflow: hidden; color: #cec0a3; font-size: .61rem; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
@@ -1118,6 +1142,13 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
 .compact-log p:not(.panel-kicker) { margin: 4px 0; padding: 5px 6px; font-size: .49rem; }
 
 .relic-detail-modal, .negotiation-modal { width: min(470px, 100%); max-height: calc(100svh - 40px); overflow-y: auto; position: relative; padding: 30px; border: 1px solid var(--gold-dim); background: radial-gradient(circle at 50% 0, rgba(113,34,35,.2), transparent 34%), #100c0c; box-shadow: 0 28px 90px rgba(0,0,0,.68); text-align: center; }
+.relic-detail-modal.has-art { width: min(730px, 100%); text-align: left; }
+.detail-art-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 24px; align-items: start; }
+.relic-artwork-detail { width: 230px; aspect-ratio: 4 / 5; border: 1px solid rgba(211,174,87,.58); background: #070505; box-shadow: 0 22px 50px rgba(0,0,0,.5), inset 0 0 0 5px rgba(211,174,87,.04); }
+.relic-artwork-detail.has-image { padding: 4px; }
+.relic-artwork-detail.is-placeholder > span { font-size: 4rem; }
+.detail-copy { min-width: 0; padding-top: 6px; }
+.detail-copy .detail-tags { justify-content: flex-start; }
 .relic-detail-modal h2, .negotiation-modal h2 { margin: 1px 0 12px; color: var(--gold-bright); font-size: 1.8rem; font-weight: 400; }
 .detail-tags { display: flex; justify-content: center; gap: 5px; margin-bottom: 13px; }
 .detail-tags span { padding: 4px 7px; border: 1px solid var(--line); color: #81745d; font-size: .5rem; }
@@ -1189,10 +1220,15 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
   .account-logout { top: 15px; right: 15px; }
   .talent-tree { grid-template-columns: 1fr; }
   .museum-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .museum-tile { grid-template-columns: 31px minmax(0, 1fr) auto; padding: 6px; }
+  .museum-tile { grid-template-columns: 40px minmax(0, 1fr) auto; padding: 6px; }
+  .relic-artwork-museum { width: 38px; }
   .tile-icon { width: 30px; height: 36px; }
   .gold-input { grid-template-columns: 1fr 72px 17px; }
   .relic-detail-modal, .negotiation-modal { padding: 27px 18px; }
+  .detail-art-layout { grid-template-columns: 1fr; gap: 16px; }
+  .relic-artwork-detail { width: min(200px, 72vw); justify-self: center; }
+  .detail-copy { padding-top: 0; text-align: center; }
+  .detail-copy .detail-tags { justify-content: center; }
   .fusion-modal { padding: 28px 15px; }
   .fusion-recipes { grid-template-columns: 1fr; }
 }
@@ -1237,7 +1273,10 @@ button:disabled { cursor: not-allowed !important; filter: grayscale(.6); opacity
   .library-tabs button:last-child { border-bottom: 0; }
   .library-results-note { flex-direction: column; gap: 4px; }
   .library-card { padding: 13px; }
+  .library-relic-layout { grid-template-columns: 88px minmax(0, 1fr); gap: 10px; }
+  .relic-artwork-library.is-placeholder > span { font-size: 2rem; }
   .library-card > header { grid-template-columns: 45px minmax(0, 1fr) auto; gap: 8px; }
+  .library-relic-content > header { gap: 6px; }
   .library-icon { width: 43px; height: 49px; font-size: 1.3rem; }
   .library-card h2 { font-size: .87rem; }
   .library-components { flex-direction: column; }
