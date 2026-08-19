@@ -4,7 +4,7 @@ Versão de referência: agosto de 2026.
 
 ## Visão do jogo
 
-Jogo social competitivo para 3 ou 4 pessoas. Cada jogador usa ouro para disputar relíquias, transforma peças em infusões, negocia com rivais e administra poderes e maldições. O vencedor é quem possui mais Prestígio depois de quatro atos.
+Jogo social competitivo para 2 a 8 pessoas, com treino solo contra bots. Cada jogador usa ouro para disputar relíquias, transforma peças em infusões, negocia com rivais e administra poderes e maldições. O vencedor é quem possui mais Prestígio depois de cinco atos.
 
 Pilares:
 
@@ -20,29 +20,35 @@ Pilares:
 flowchart TD
   A[Conta com nome do jogador] --> B[Árvore do Patronato]
   B --> C[Lobby público]
-  C --> D[Sala de 3 ou 4 jogadores]
-  D --> E[Cada jogador recebe 3 Intrigas]
-  E --> F[Escolhe 1 em segredo]
-  F --> G[Ato 1: 3 lotes]
-  G --> H[Renda e reset do Museu]
-  H --> I[Ato 2: 3 lotes]
-  I --> J[Votação entre 8 Itens Proibidos]
-  J --> K[Ato 3: Item Proibido + 2 lotes]
-  K --> L[Renda e reset do Museu]
+  C --> D{Modo da sala}
+  D -->|Multiplayer| E[Sala flexível de 2 a 8 pessoas]
+  D -->|Solo| E2[1 jogador adiciona de 1 a 7 bots]
+  E2 --> F[Cada participante recebe 3 Intrigas]
+  E --> F
+  F --> G[Escolhe 1 em segredo]
+  G --> H[Ato 1: 3 lotes]
+  H --> I[Renda e reset do Museu]
+  I --> J[Ato 2: 3 lotes]
+  J --> K[Votação entre 8 Itens Proibidos]
+  K --> L[Ato 3: Item Proibido + 2 lotes]
   L --> M[Ato 4: 3 lotes]
-  M --> N[Revelação das Intrigas]
-  N --> O[Cálculo de Prestígio]
-  O --> P[Vencedor recebe 3 Lúmens]
-  P --> C
+  M --> N[Votação do evento da última noite]
+  N --> O[Ato 5: 3 lotes]
+  O --> P[Revelação das Intrigas]
+  P --> Q[Cálculo de Prestígio]
+  Q --> R{Modo multiplayer?}
+  R -->|Sim| S[Vencedor recebe 3 Lúmens]
+  R -->|Solo| C
+  S --> C
 ```
 
 ## Estrutura da partida
 
 | Elemento | Regra atual |
 |---|---|
-| Jogadores | Exatamente 3 ou 4 pessoas reais |
-| Atos | 4 |
-| Lotes | 3 por ato, 12 no total, sorteados novamente em cada partida |
+| Jogadores | Multiplayer com 2 a 8 pessoas; solo com 1 humano e 1 a 7 bots |
+| Atos | 5 |
+| Lotes | 3 por ato, 15 no total, sorteados novamente em cada partida |
 | Ouro inicial | 15; Bolsa do Patrono acrescenta 3 |
 | Renda entre atos | 5, com bônus e descontos de talentos, pobreza e maldições |
 | Esmola do Anfitrião | Jogadores empatados com o menor ouro recebem +2 |
@@ -50,6 +56,7 @@ flowchart TD
 | Infusões | No máximo 1 por ato; dupla custa 2, tripla custa 4 |
 | Mercado entre Museus | Peça uma relíquia rival oferecendo ouro ou ofereça uma peça sua com preço definido; o comprador realiza 1 compra por ato, ou 2 com Contrabandista |
 | Votação proibida | Depois do sexto lote; empate é decidido aleatoriamente |
+| Evento da última noite | Antes do quinto ato; a corte escolhe Feira dos Fragmentos, Tribunal das Máscaras ou Mercado dos Rostos Roubados |
 | Vitória | Maior Prestígio final |
 
 ## Recursos e conversões
@@ -79,19 +86,19 @@ Infusões já possuem seu próprio valor de Prestígio e substituem as peças co
 
 ### Lúmens
 
-São a progressão permanente da conta. O vencedor recebe 3 Lúmens. O primeiro talento é gratuito; os seguintes custam 2, 3, 5, 8 ou 12 conforme a profundidade da árvore.
+São a progressão permanente da conta. O vencedor de uma partida multiplayer recebe 3 Lúmens. O modo solo não altera Lúmens nem vitórias. O primeiro talento é gratuito; os seguintes custam 2, 3, 5, 8 ou 12 conforme a profundidade da árvore.
 
 ### Maldições
 
 Relíquias amaldiçoadas são peças premium com um preço tático, não armadilhas sem recompensa. Uma penalidade direta nunca reduz uma relíquia comum amaldiçoada abaixo de 2 Prestígios líquidos. Cumprir a condição da maldição ou purificá-la recupera o valor premium completo.
 
-Maldições econômicas preservam o Prestígio da peça e descontam a renda entre atos. A Maçã Solar de Luna, por exemplo, vale 3 Prestígios e reduz a renda em 2 moedas por ato; seu poder transfere tanto a relíquia quanto esse custo econômico a um rival.
+Maldições econômicas preservam o Prestígio da peça e descontam a renda entre atos. Ao transferir a Maçã Solar de Luna, o comprador original preserva o Prestígio conquistado e o rival recebe uma versão sem valor que reduz a renda duas vezes. Depois da segunda cobrança, a maldição se encerra e a Maçã transferida passa a valer 1 Prestígio.
 
 ## Conteúdo atual
 
 | Sistema | Quantidade | Função |
 |---|---:|---|
-| Relíquias comuns | 42 | Cada partida sorteia uma rotação diferente de 12 lotes e preserva receitas possíveis |
+| Relíquias comuns | 42 | Cada partida sorteia uma rotação diferente de 15 lotes e garante ao menos duas receitas duplas possíveis |
 | Itens Proibidos | 8 | Candidatos à votação do meio da partida; inclui FABIANA, A Criadora |
 | Infusões | 34 | Transformações duplas ou triplas |
 | Talentos | 27 | Progressão permanente em 5 ramos |
@@ -134,10 +141,12 @@ Decisões de equilíbrio:
 | Sistema | Estado | Verificação |
 |---|---|---|
 | Conta, nome e talentos permanentes | Operacional | API persiste nome de jogador, Lúmens e talentos; não exige personagem fixo |
-| Lobby e salas | Operacional | Testes com 3 e 4 conexões reais |
+| Lobby e salas | Operacional | Testes com salas multiplayer de 2 e 3 conexões e sala solo com bots |
 | Sincronização da partida | Operacional | Controle de versão e reconexão por WebSocket |
 | Privacidade das Intrigas | Operacional | Servidor personaliza o estado por jogador e revela apenas no final |
-| Leilão e rotação | Operacional | Cada início sorteia 12 das 42 peças, evita repetir a seleção anterior e sincroniza o resultado da sala |
+| Leilão e rotação | Operacional | Cada início sorteia 15 das 42 peças, evita repetir a seleção anterior e sincroniza o resultado da sala |
+| Bots do modo solo | Operacional | Entram como Luna, Roman, Zat, Eichiro Oda, Laia, Toriyama e Sabine; escolhem intrigas, votam e fazem lances automaticamente |
+| Evento da última noite | Operacional | Votação, três eventos, escolhas individuais e desempate de catch-up sincronizados |
 | Renda entre atos | Operacional | Reseta limites do ato e aplica pobreza, talentos e maldições |
 | Museu e poderes | Operacional | Limite de ativações calculado no motor e exibido na interface |
 | Negociação | Operacional | Oferta, contraproposta, venda, Prestígio e parceiros são sincronizados |
@@ -154,14 +163,17 @@ Os testes do projeto validam:
 - árvore de talentos sem dependências inexistentes ou invertidas;
 - todas as receitas com componentes existentes e custos corretos;
 - todos os poderes ligados a um tipo reconhecido pelo motor;
-- baralho com 12 lotes comuns e sem duplicatas;
+- baralho com 15 lotes comuns e sem duplicatas;
 - rotações consecutivas diferentes, usando o catálogo além de um conjunto fixo;
 - presença dos 29 nomes em artefatos, infusões e conteúdo secreto;
 - componentes válidos para as sete novas infusões e execução do poder de FABIANA;
 - progresso calculável para as oito Intrigas;
 - bônus da Intriga dentro da fórmula final;
 - privacidade da escolha entre clientes e revelação ao final;
-- criação e início de salas de 3 e 4 jogadores.
+- criação e início de salas multiplayer sem lotação fixa;
+- ordem e automação dos bots, sem recompensa de Lúmens no solo;
+- votação e resolução dos três eventos antes do quinto ato;
+- duas cobranças da Maçã Solar transferida antes de ela se purificar.
 
 ## Pontos para observar em playtests
 

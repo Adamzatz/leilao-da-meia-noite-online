@@ -1,12 +1,12 @@
 # Leilão da Meia-Noite Online
 
-Jogo multiplayer para 3 ou 4 pessoas com lobby público, salas persistentes, reconexão e partidas sincronizadas em tempo real.
+Jogo de leilão para 2 a 8 pessoas, com lobby público, salas flexíveis, reconexão e partidas sincronizadas em tempo real. Também há treino solo com 1 a 7 bots da Crônica; partidas solo não geram Lúmens nem vitórias.
 
 Jogue em produção: [leilaodameianoite.shardweb.app](https://leilaodameianoite.shardweb.app)
 
 Talentos, negociações, poderes de relíquias e infusões são aplicados ao estado compartilhado da sala e sincronizados com todos os participantes.
 
-O menu principal inclui a Biblioteca da Meia-Noite, com 42 relíquias comuns, 34 receitas de infusão, 8 Itens Proibidos e 8 Intrigas Secretas. Cada partida sorteia uma rotação diferente de 12 relíquias e preserva oportunidades de infusão. Vinte e nove figuras da Crônica vivem nos nomes, poderes, maldições, combos e objetivos do jogo; cada pessoa joga usando o próprio nome cadastrado. FABIANA, A Criadora é o Item Proibido primordial e possui um poder exclusivo no motor multiplayer.
+O menu principal inclui a Biblioteca da Meia-Noite, com 42 relíquias comuns, 34 receitas de infusão, 8 Itens Proibidos e 8 Intrigas Secretas. Cada partida sorteia 15 relíquias em cinco atos e garante pelo menos duas oportunidades de infusão. Antes do quinto ato, a corte vota entre Feira dos Fragmentos, Tribunal das Máscaras e Mercado dos Rostos Roubados. Vinte e nove figuras da Crônica vivem nos nomes, poderes, maldições, combos e objetivos do jogo; cada pessoa joga usando o próprio nome cadastrado.
 
 O fluxo completo, as fórmulas de economia e Prestígio e a auditoria dos sistemas estão no [Mapa de Game Design](GAME_DESIGN_MAP.md).
 

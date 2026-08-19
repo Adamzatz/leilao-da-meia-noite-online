@@ -65,7 +65,7 @@ test("three real players can create, fill, ready and synchronize a room", async 
   const clients = accounts.map((account) => connect(account.cookie));
   await Promise.all(clients.map((client) => client.waitFor((message) => message.type === "hello")));
 
-  clients[0].socket.send(JSON.stringify({ type: "room:create", name: `Teste ${suffix}`, maxPlayers: 3 }));
+  clients[0].socket.send(JSON.stringify({ type: "room:create", name: `Teste ${suffix}`, mode: "multiplayer" }));
   const created = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.name === `Teste ${suffix}`);
   const roomId = created.room.id;
   clients[1].socket.send(JSON.stringify({ type: "room:join", roomId }));
@@ -121,22 +121,69 @@ test("three real players can create, fill, ready and synchronize a room", async 
   clients.forEach((client) => client.socket.close());
 });
 
-test("a four-player room only starts after all four guests are ready", async () => {
+test("a multiplayer room starts with two ready players without filling eight seats", async () => {
   const suffix = `q${Date.now().toString(36).slice(-6)}`;
-  const talents = ["patron-purse", "silver-tongue", "veiled-glimpse", "radiant-seal"];
-  const accounts = await Promise.all(Array.from({ length: 4 }, (_, index) => register(`Four${index}${suffix}`, talents[index])));
+  const talents = ["patron-purse", "silver-tongue"];
+  const accounts = await Promise.all(Array.from({ length: 2 }, (_, index) => register(`Duo${index}${suffix}`, talents[index])));
   const clients = accounts.map((account) => connect(account.cookie));
   await Promise.all(clients.map((client) => client.waitFor((message) => message.type === "hello")));
-  clients[0].socket.send(JSON.stringify({ type: "room:create", name: `Quarteto ${suffix}`, maxPlayers: 4 }));
-  const created = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.name === `Quarteto ${suffix}`);
+  clients[0].socket.send(JSON.stringify({ type: "room:create", name: `Dupla ${suffix}`, mode: "multiplayer" }));
+  const created = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.name === `Dupla ${suffix}`);
   for (const client of clients.slice(1)) client.socket.send(JSON.stringify({ type: "room:join", roomId: created.room.id }));
-  await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 4);
+  await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 2);
   for (const client of clients) client.socket.send(JSON.stringify({ type: "room:ready", ready: true }));
-  const ready = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 4 && message.room.members.every((member) => member.ready));
+  const ready = await clients[0].waitFor((message) => message.type === "room:snapshot" && message.room.members.length === 2 && message.room.members.every((member) => member.ready));
   const players = ready.room.members.map((member) => ({ id: member.userId, userId: member.userId, username: member.username, isHuman: false, intrigueOptions: ["forbidden-devotee", "cursed-museum", "last-bettor"], intrigueId: null, intrigueChosen: false }));
   const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "intrigue", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
   clients[0].socket.send(JSON.stringify({ type: "room:start", gameState: initialGame }));
-  const started = await clients[3].waitFor((message) => message.type === "room:snapshot" && message.room.status === "playing");
-  assert.equal(started.room.members.length, 4);
+  const started = await clients[1].waitFor((message) => message.type === "room:snapshot" && message.room.status === "playing");
+  assert.equal(started.room.members.length, 2);
+  assert.equal(started.room.maxPlayers, 8);
   clients.forEach((client) => client.socket.close());
+});
+
+test("solo room adds lore bots in order and never awards Lumens", async () => {
+  const suffix = `s${Date.now().toString(36).slice(-6)}`;
+  const account = await register(`Solo${suffix}`, "patron-purse");
+  const client = connect(account.cookie);
+  await client.waitFor((message) => message.type === "hello");
+  client.socket.send(JSON.stringify({ type: "room:create", name: `Treino ${suffix}`, mode: "solo" }));
+  const created = await client.waitFor((message) => message.type === "room:snapshot" && message.room.name === `Treino ${suffix}`);
+  assert.equal(created.room.mode, "solo");
+
+  client.socket.send(JSON.stringify({ type: "room:add-bot" }));
+  const luna = await client.waitFor((message) => message.type === "room:snapshot" && message.room.bots.length === 1);
+  assert.equal(luna.room.bots[0].name, "Luna");
+  client.socket.send(JSON.stringify({ type: "room:add-bot" }));
+  const roman = await client.waitFor((message) => message.type === "room:snapshot" && message.room.bots.length === 2);
+  assert.deepEqual(roman.room.bots.map((bot) => bot.name), ["Luna", "Roman"]);
+
+  client.socket.send(JSON.stringify({ type: "room:ready", ready: true }));
+  const ready = await client.waitFor((message) => message.type === "room:snapshot" && message.room.members[0].ready && message.room.bots.length === 2);
+  const human = ready.room.members[0];
+  const players = [
+    { id: human.userId, userId: human.userId, username: human.username, isHuman: true, intrigueOptions: ["blue-blood", "dead-merchant", "bloodied-hands"], intrigueId: null, intrigueChosen: false },
+    ...ready.room.bots.map((bot, index) => ({ id: bot.id, userId: bot.id, username: bot.name, isHuman: false, isBot: true, intrigueOptions: ["forbidden-devotee", "cursed-museum", "last-bettor"], intrigueId: ["forbidden-devotee", "cursed-museum"][index], intrigueChosen: true })),
+  ];
+  const initialGame = { phase: "playing", players, deck: [], lotIndex: 0, act: 1, status: "intrigue", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
+  client.socket.send(JSON.stringify({ type: "room:start", gameState: initialGame }));
+  const started = await client.waitFor((message) => message.type === "room:snapshot" && message.room.status === "playing");
+  assert.equal(started.room.gameState.players.filter((player) => player.isBot).length, 2);
+
+  const humanChoice = { ...started.room.gameState, players: started.room.gameState.players.map((player) => player.id === human.userId ? { ...player, intrigueId: "blue-blood", intrigueChosen: true } : player) };
+  client.socket.send(JSON.stringify({ type: "game:update", expectedVersion: 1, gameState: humanChoice }));
+  const announced = await client.waitFor((message) => message.type === "room:snapshot" && message.room.version === 2);
+  const awardedState = { ...announced.room.gameState, deck: [{ id: "final-lot" }], lotIndex: 0, status: "awarded", lastAward: { winnerId: human.userId, price: 1, message: "Último lote" } };
+  client.socket.send(JSON.stringify({ type: "game:update", expectedVersion: 2, gameState: awardedState }));
+  const awarded = await client.waitFor((message) => message.type === "room:snapshot" && message.room.version === 3);
+  client.socket.send(JSON.stringify({ type: "game:update", expectedVersion: 3, gameState: { ...awarded.room.gameState, status: "intrigueReveal" } }));
+  const revealed = await client.waitFor((message) => message.type === "room:snapshot" && message.room.version === 4);
+  const scores = revealed.room.gameState.players.map((player, index) => ({ playerId: player.id, total: 10 - index }));
+  client.socket.send(JSON.stringify({ type: "game:update", expectedVersion: 4, gameState: { ...revealed.room.gameState, phase: "results", scores } }));
+  await client.waitFor((message) => message.type === "room:snapshot" && message.room.status === "finished");
+  const profileResponse = await fetch(`${origin}/api/account`, { headers: { Cookie: account.cookie } });
+  const profile = (await profileResponse.json()).account;
+  assert.equal(profile.lumens, 0);
+  assert.equal(profile.wins, 0);
+  client.socket.close();
 });

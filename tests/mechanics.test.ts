@@ -10,6 +10,8 @@ import {
   artifactWindowState,
   acceptTradeOffer,
   beginAuction,
+  beginSpecialEventVote,
+  castSpecialEventVote,
   calculateScore,
   cancelTradeOffer,
   completeTrade,
@@ -20,8 +22,10 @@ import {
   infusionNotebook,
   infusionRecipesForRelic,
   intrigueProgress,
+  chooseSpecialEventAction,
   passTurn,
   proposeTrade,
+  takeBotAuctionTurn,
   type GameState,
   type Player,
 } from "../src/App.tsx";
@@ -239,9 +243,49 @@ test("Presente Solar transfere apenas a Maçã e a maldição, preservando o Pre
   assert.equal(originalBuyer.prestigeBonus, 3);
   assert.equal(calculateScore(originalBuyer).total, 6, "mantém 3 Prestígios da Maçã e ganha 3 pelo ouro acumulado");
   assert.equal(transferredApple.prestige, 0);
+  assert.equal(transferredApple.curseCharges, 2);
   assert.equal(transferredApple.curse?.incomePenalty, 2);
   assert.equal(calculateScore(cursedTarget).relics, 0);
   assert.match(result.log.at(-1) ?? "", /preservou 3 Prestígios/i);
+});
+
+test("a Maçã Solar transferida cobra exatamente duas rendas e depois vale 1 Prestígio", () => {
+  const apple = structuredClone(RELICS.find((item) => item.id === "golden-apple")!);
+  const transferred = executeRelicAction(game([player("buyer", { inventory: [apple] }), player("rival")]), "buyer", apple.id, "rival");
+  const firstIncome = distributeIncome(transferred, 3);
+  const afterFirst = firstIncome.players.find((candidate) => candidate.id === "rival")!.inventory.find((item) => item.id === apple.id)!;
+  assert.equal(afterFirst.curseCharges, 1);
+  assert.equal(afterFirst.curseSuppressed, undefined);
+  assert.equal(afterFirst.prestige, 0);
+
+  const secondIncome = distributeIncome(firstIncome, 6);
+  const afterSecond = secondIncome.players.find((candidate) => candidate.id === "rival")!.inventory.find((item) => item.id === apple.id)!;
+  assert.equal(afterSecond.curseCharges, 0);
+  assert.equal(afterSecond.curseSuppressed, true);
+  assert.equal(afterSecond.prestige, 1);
+});
+
+test("bots fazem a própria decisão de lance sem prender o turno", () => {
+  const initial = game([player("bot-luna", { isBot: true, gold: 10 }), player("buyer", { gold: 10 })]);
+  const opened = beginAuction(initial);
+  assert.equal(opened.auction?.turnId, "bot-luna");
+  const decided = takeBotAuctionTurn(opened, "bot-luna");
+  assert.notEqual(decided.auction?.turnId, "bot-luna");
+});
+
+test("Mercado dos Rostos Roubados desempata a favor de quem está atrás", () => {
+  const leader = player("buyer", { prestigeBonus: 5 });
+  const trailing = player("rival", { prestigeBonus: 0 });
+  let state = beginSpecialEventVote(game([leader, trailing]));
+  state = castSpecialEventVote(state, leader.id, "stolen-mask-market");
+  state = castSpecialEventVote(state, trailing.id, "stolen-mask-market");
+  assert.equal(state.status, "eventAction");
+  state = chooseSpecialEventAction(state, leader.id, "guardian:5");
+  state = chooseSpecialEventAction(state, trailing.id, "guardian:5");
+  assert.equal(state.status, "eventResult");
+  assert.equal(state.players.find((candidate) => candidate.id === trailing.id)?.shield, 1);
+  assert.equal(state.players.find((candidate) => candidate.id === trailing.id)?.ward, 1);
+  assert.equal(state.players.find((candidate) => candidate.id === leader.id)?.shield, 0);
 });
 
 test("Luva Contrabandista rouba moedas no sucesso sem inverter a transferência", () => {

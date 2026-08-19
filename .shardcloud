@@ -1,5 +1,5 @@
 DISPLAY_NAME=Leilao da Meia-Noite Online
-DESCRIPTION=Jogo multiplayer de leilao, reliquias e intrigas para 3 ou 4 amigos.
+DESCRIPTION=Jogo de leilao, reliquias e intrigas para 2 a 8 amigos, com treino solo por bots.
 LANGUAGE=node
 MEMORY=512
 VERSION=recommended

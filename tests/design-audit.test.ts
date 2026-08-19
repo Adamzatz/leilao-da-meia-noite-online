@@ -38,13 +38,13 @@ test("todos os poderes do catálogo pertencem ao motor implementado", () => {
   }
 });
 
-test("cada partida recebe uma rotação aleatória diferente com doze lotes", () => {
+test("cada partida recebe uma rotação aleatória diferente com quinze lotes", () => {
   const seenArtifacts = new Set<string>();
   let previousDeck: ReturnType<typeof createDeck> = [];
   for (let run = 0; run < 30; run += 1) {
     const deck = createDeck();
-    assert.equal(deck.length, 12);
-    assert.equal(new Set(deck.map((item) => item.id)).size, 12);
+    assert.equal(deck.length, 15);
+    assert.equal(new Set(deck.map((item) => item.id)).size, 15);
     assert.ok(deck.every((item) => RELICS.some((relic) => relic.id === item.id)));
     const deckIds = new Set(deck.map((item) => item.id));
     const possibleDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => deckIds.has(id)));
@@ -59,7 +59,7 @@ test("cada partida recebe uma rotação aleatória diferente com doze lotes", ()
     deck.forEach((item) => seenArtifacts.add(item.id));
     previousDeck = deck;
   }
-  assert.ok(seenArtifacts.size > 12, "a rotação precisa usar o catálogo além de um conjunto fixo");
+  assert.ok(seenArtifacts.size > 15, "a rotação precisa usar o catálogo além de um conjunto fixo");
 });
 
 test("as relíquias da lore representam os quatro amigos por nome e maldição", () => {

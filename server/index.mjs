@@ -18,6 +18,8 @@ const temporaryStorePath = path.join(dataDirectory, "store.tmp");
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 const SESSION_COOKIE = "midnight_session";
 const ROOM_TTL = 1000 * 60 * 60 * 8;
+const MAX_ROOM_PLAYERS = 8;
+const BOT_NAMES = ["Luna", "Roman", "Zat", "Eichiro Oda", "Laia", "Toriyama", "Sabine"];
 const INTRIGUE_IDS = new Set(["blue-blood", "dead-merchant", "bloodied-hands", "forbidden-devotee", "cursed-museum", "last-bettor", "obsessive-collector", "court-conspirator"]);
 
 class JsonStore {
@@ -35,6 +37,12 @@ class JsonStore {
         sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
         rooms: Array.isArray(parsed.rooms) ? parsed.rooms : [],
       };
+      this.data.rooms = this.data.rooms.map((room) => ({
+        ...room,
+        mode: room.mode === "solo" ? "solo" : "multiplayer",
+        maxPlayers: MAX_ROOM_PLAYERS,
+        bots: Array.isArray(room.bots) ? room.bots.slice(0, MAX_ROOM_PLAYERS - 1) : [],
+      }));
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
       await this.save();
@@ -145,7 +153,7 @@ function activeConnections(userId) {
 
 function publicRooms() {
   return store.data.rooms
-    .filter((room) => room.status !== "finished")
+    .filter((room) => room.status !== "finished" && room.mode !== "solo")
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((room) => {
       const host = store.data.users.find((user) => user.id === room.hostUserId);
@@ -155,6 +163,7 @@ function publicRooms() {
         name: room.name,
         hostName: host?.username ?? "Anfitrião",
         maxPlayers: room.maxPlayers,
+        mode: room.mode,
         playerCount: room.members.length,
         status: room.status,
         createdAt: room.createdAt,
@@ -169,6 +178,7 @@ function roomSnapshot(room, viewerId) {
     name: room.name,
     hostUserId: room.hostUserId,
     maxPlayers: room.maxPlayers,
+    mode: room.mode,
     status: room.status,
     version: room.version,
     viewerId,
@@ -186,6 +196,7 @@ function roomSnapshot(room, viewerId) {
         isHost: member.userId === room.hostUserId,
       };
     }),
+    bots: (room.bots ?? []).map((bot, index) => ({ ...bot, seat: room.members.length + index })),
   };
 }
 
@@ -196,6 +207,7 @@ function gameStateForViewer(gameState, viewerId) {
     ...gameState,
     players: gameState.players.map((player) => ({
       ...player,
+      isHuman: player.id === viewerId,
       intrigueOptions: player.id === viewerId ? [...(player.intrigueOptions ?? [])] : [],
       intrigueId: revealIntrigues || player.id === viewerId ? player.intrigueId ?? null : null,
       intrigueChosen: Boolean(player.intrigueId),
@@ -231,15 +243,17 @@ function broadcastRoom(room) {
 function validateGameState(room, gameState) {
   if (!gameState || typeof gameState !== "object" || !Array.isArray(gameState.players)) return false;
   if (JSON.stringify(gameState).length > 600_000) return false;
-  const memberIds = [...room.members.map((member) => member.userId)].sort();
+  const memberIds = [...room.members.map((member) => member.userId), ...(room.bots ?? []).map((bot) => bot.id)].sort();
   const playerIds = [...gameState.players.map((player) => player.id)].sort();
   return memberIds.length === playerIds.length && memberIds.every((id, index) => id === playerIds[index]);
 }
 
-function validateInitialIntrigues(gameState) {
+function validateInitialIntrigues(gameState, room) {
   return gameState?.status === "intrigue" && gameState.players.every((player) => {
     const options = Array.isArray(player.intrigueOptions) ? player.intrigueOptions : [];
-    return options.length === 3 && new Set(options).size === 3 && options.every((id) => INTRIGUE_IDS.has(id)) && !player.intrigueId && !player.intrigueChosen;
+    const validOptions = options.length === 3 && new Set(options).size === 3 && options.every((id) => INTRIGUE_IDS.has(id));
+    const isBot = (room.bots ?? []).some((bot) => bot.id === player.id);
+    return validOptions && (isBot ? options.includes(player.intrigueId) && player.intrigueChosen === true : !player.intrigueId && !player.intrigueChosen);
   });
 }
 
@@ -278,7 +292,7 @@ function validateIntrigueTransition(room, previousState, incomingState, actorId)
 }
 
 async function awardWinner(room, previousState, nextState) {
-  if (previousState?.phase === "results" || nextState?.phase !== "results") return;
+  if (room.mode === "solo" || previousState?.phase === "results" || nextState?.phase !== "results") return;
   const winnerId = nextState.scores?.[0]?.playerId;
   const winner = store.data.users.find((user) => user.id === winnerId);
   if (!winner || !room.members.some((member) => member.userId === winner.id)) return;
@@ -414,10 +428,10 @@ webSocketServer.on("connection", (socket, _request, user) => {
           else broadcastRoom(oldRoom);
         }
         if (user.unlockedTalents.length === 0) return sendError(socket, "Escolha seu primeiro talento antes de criar uma sala.");
-        const maxPlayers = Number(message.maxPlayers) === 3 ? 3 : 4;
+        const mode = message.mode === "solo" ? "solo" : "multiplayer";
         const room = {
           id: randomUUID(), code: roomCode(), name: normalizeRoomName(message.name, user.username), hostUserId: user.id,
-          maxPlayers, status: "waiting", version: 0, gameState: null, createdAt: Date.now(), updatedAt: Date.now(),
+          mode, maxPlayers: MAX_ROOM_PLAYERS, bots: [], status: "waiting", version: 0, gameState: null, createdAt: Date.now(), updatedAt: Date.now(),
           members: [{ userId: user.id, ready: false, joinedAt: Date.now() }],
         };
         store.data.rooms.push(room);
@@ -430,6 +444,7 @@ webSocketServer.on("connection", (socket, _request, user) => {
         if (user.unlockedTalents.length === 0) return sendError(socket, "Escolha seu primeiro talento antes de entrar.");
         const room = store.data.rooms.find((candidate) => candidate.id === message.roomId || candidate.code === String(message.code ?? "").toUpperCase());
         if (!room || room.status !== "waiting") return sendError(socket, "Esta sala não está mais aceitando convidados.", "ROOM_UNAVAILABLE");
+        if (room.mode === "solo") return sendError(socket, "Esta é uma sessão solo privada.", "ROOM_PRIVATE");
         if (room.members.length >= room.maxPlayers) return sendError(socket, "A mesa já está completa.", "ROOM_FULL");
         const oldRoom = currentRoom(user.id);
         if (oldRoom && oldRoom.id !== room.id) return sendError(socket, "Saia da sua sala atual antes de entrar em outra.");
@@ -478,10 +493,37 @@ webSocketServer.on("connection", (socket, _request, user) => {
         return;
       }
 
+      if (message.type === "room:add-bot") {
+        if (room.hostUserId !== user.id) return sendError(socket, "Somente o anfitrião pode convocar autômatos.", "HOST_ONLY");
+        if (room.status !== "waiting" || room.mode !== "solo") return sendError(socket, "Autômatos só podem entrar numa sessão solo em preparação.");
+        room.bots ??= [];
+        if (room.members.length + room.bots.length >= room.maxPlayers || room.bots.length >= BOT_NAMES.length) return sendError(socket, "A mesa solo já atingiu o limite de oito participantes.", "ROOM_FULL");
+        const name = BOT_NAMES[room.bots.length];
+        room.bots.push({ id: `bot:${randomUUID()}`, name });
+        room.updatedAt = Date.now();
+        await store.save();
+        broadcastRoom(room);
+        return;
+      }
+
+      if (message.type === "room:remove-bot") {
+        if (room.hostUserId !== user.id) return sendError(socket, "Somente o anfitrião pode retirar autômatos.", "HOST_ONLY");
+        if (room.status !== "waiting" || room.mode !== "solo") return sendError(socket, "Autômatos só podem ser retirados na preparação solo.");
+        room.bots = (room.bots ?? []).filter((bot) => bot.id !== message.botId);
+        room.updatedAt = Date.now();
+        await store.save();
+        broadcastRoom(room);
+        return;
+      }
+
       if (message.type === "room:start") {
         if (room.hostUserId !== user.id) return sendError(socket, "Somente o anfitrião pode abrir o baile.");
-        if (room.status !== "waiting" || room.members.length !== room.maxPlayers || room.members.some((candidate) => !candidate.ready)) return sendError(socket, `A mesa precisa de ${room.maxPlayers} convidados prontos.`);
-        if (!validateGameState(room, message.gameState) || message.gameState.phase !== "playing" || !validateInitialIntrigues(message.gameState)) return sendError(socket, "O estado inicial da partida é inválido.");
+        const participantCount = room.members.length + (room.bots ?? []).length;
+        const validTable = room.mode === "solo"
+          ? room.members.length === 1 && (room.bots ?? []).length >= 1
+          : room.members.length >= 2 && room.members.length <= room.maxPlayers;
+        if (room.status !== "waiting" || !validTable || participantCount > room.maxPlayers || room.members.some((candidate) => !candidate.ready)) return sendError(socket, room.mode === "solo" ? "Adicione pelo menos um autômato e marque-se como pronto." : "A mesa precisa de 2 a 8 convidados prontos.");
+        if (!validateGameState(room, message.gameState) || message.gameState.phase !== "playing" || !validateInitialIntrigues(message.gameState, room)) return sendError(socket, "O estado inicial da partida é inválido.");
         room.gameState = message.gameState;
         room.status = "playing";
         room.version += 1;

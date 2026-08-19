@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 type Tag = "Realeza" | "Desejo" | "Guerra" | "Morte" | "Oculto" | "Fé" | "Traição" | "Riqueza";
 type Branch = "Fortuna" | "Visão" | "Glória" | "Intriga" | "Maldição";
-type GameStatus = "intrigue" | "announcement" | "bidding" | "awarded" | "actBreak" | "legendVote" | "voteResult" | "intrigueReveal";
+type GameStatus = "intrigue" | "announcement" | "bidding" | "awarded" | "actBreak" | "legendVote" | "voteResult" | "eventVote" | "eventAction" | "eventResult" | "intrigueReveal";
+type RoomMode = "multiplayer" | "solo";
+type SpecialEventId = "fragment-fair" | "mask-tribunal" | "stolen-mask-market";
+type StolenMaskId = "counterfeiter" | "usurper" | "creditor" | "guardian";
 type TargetKind = true | "player" | "rivalRelic" | "ownRelic" | "deckRelic";
 type ActionType = "tax" | "discount" | "stealGold" | "silence" | "gainGold" | "convert" | "ward" | "reflect" | "stealPrestige" | "mission" | "giftCurse" | "exalt" | "grandDiscount" | "shield" | "royalDecree" | "tradeMark" | "siphon" | "coinFlip" | "judgment" | "oracle" | "riskBoost" | "recharge" | "purify" | "tradeBoost" | "creation" | "fusion";
 
@@ -12,7 +15,7 @@ export type Intrigue = { id: string; name: string; icon: string; description: st
 type ActivePower = { name: string; description: string; type: ActionType; once: "act" | "game"; target?: TargetKind; value?: number; chance?: number; };
 type Curse = { name: string; description: string; penalty?: number; incomePenalty?: number; };
 type Relic = { id: string; name: string; epithet: string; icon: string; art?: string; prestige: number; start: number; tags: Tag[]; cursed?: boolean; curse?: Curse; legendary?: boolean; fusionTier?: 2 | 3; lore: string; power: ActivePower; };
-type OwnedRelic = Relic & { curseSuppressed?: boolean; bonusPrestige?: number; usedAct?: boolean; usedGame?: boolean; exhaustedLots?: number; awakenings?: number; };
+type OwnedRelic = Relic & { curseSuppressed?: boolean; bonusPrestige?: number; usedAct?: boolean; usedGame?: boolean; exhaustedLots?: number; awakenings?: number; curseCharges?: number; transferredCurse?: boolean; fragment?: boolean; };
 type FusionRecipe = { id: string; components: string[]; result: Relic; tier: 2 | 3; cost: number; upgradeFrom?: string; upgradeWith?: string; };
 
 export type Player = {
@@ -21,6 +24,7 @@ export type Player = {
   username: string;
   character: Character;
   isHuman: boolean;
+  isBot?: boolean;
   skills: string[];
   gold: number;
   inventory: OwnedRelic[];
@@ -68,9 +72,10 @@ type TradeOffer = {
   status?: "offer" | "counter";
 };
 type NegotiationDraft = { buyerId: string; sellerId: string; relicId: string; amount: number; kind: "buy-request" | "sale-offer"; message: string; };
-type LobbyRoom = { id: string; code: string; name: string; hostName: string; maxPlayers: 3 | 4; playerCount: number; status: "waiting" | "playing"; createdAt: number; };
+type LobbyRoom = { id: string; code: string; name: string; hostName: string; maxPlayers: number; playerCount: number; status: "waiting" | "playing"; createdAt: number; mode: RoomMode; };
 type RoomMember = { userId: string; username: string; skills: string[]; wins: number; ready: boolean; seat: number; online: boolean; isHost: boolean; };
-type OnlineRoom = { id: string; code: string; name: string; hostUserId: string; maxPlayers: 3 | 4; status: "waiting" | "playing" | "finished"; version: number; viewerId: string; gameState: GameState | null; members: RoomMember[]; };
+type RoomBot = { id: string; name: string; seat: number; };
+type OnlineRoom = { id: string; code: string; name: string; hostUserId: string; maxPlayers: number; mode: RoomMode; status: "waiting" | "playing" | "finished"; version: number; viewerId: string; gameState: GameState | null; members: RoomMember[]; bots: RoomBot[]; };
 
 export type GameState = {
   phase: "intro" | "library" | "talents" | "lobby" | "room" | "playing" | "results";
@@ -85,11 +90,21 @@ export type GameState = {
   scores: Score[];
   voteOutcome: VoteOutcome | null;
   legendVotes: Record<string, string>;
+  specialEventVotes?: Record<string, SpecialEventId>;
+  specialEventId?: SpecialEventId | null;
+  specialEventChoices?: Record<string, string>;
+  specialEventOptions?: Record<string, string[]>;
+  specialEventResults?: string[];
   pendingOffer: TradeOffer | null;
   rewardGranted: boolean;
 };
 
-const PLAYER_SIGILS = ["♠", "♛", "◈", "♜"];
+const PLAYER_SIGILS = ["♠", "♛", "◈", "♜", "☽", "⚔", "✧", "☿"];
+export const BOT_NAMES = ["Luna", "Roman", "Zat", "Eichiro Oda", "Laia", "Toriyama", "Sabine"] as const;
+const MAX_ROOM_PLAYERS = 8;
+const LOTS_PER_ACT = 3;
+const TOTAL_ACTS = 5;
+const TOTAL_LOTS = LOTS_PER_ACT * TOTAL_ACTS;
 export const LORE_FIGURES = ["Zat", "Eichiro Oda", "Laia", "Julia Briolet", "Toriyama", "José", "Barthor", "Olivia", "Sasha Cortex", "Anjo Caído", "Veronica", "Ferndinand", "Luna", "Duvan", "Bélico", "Asma Armas", "Ximbinha", "Sabine", "Cajango", "Dialgo", "Feliciano", "Dimas", "Roman", "Galthak", "Daniel Ramos", "Haika Kimira", "Giovana", "Ana Clara", "FABIANA"] as const;
 
 function namedSignatures(text: string): string[] {
@@ -113,6 +128,19 @@ function RelicArtwork({ relic, variant }: { relic: Pick<Relic, "name" | "icon" |
 function playerIdentity(userId: string, username: string, seat: number): Character {
   return { id: userId, name: username, title: "Convidado da Meia-Noite", sigil: PLAYER_SIGILS[seat % PLAYER_SIGILS.length] };
 }
+
+export const SPECIAL_EVENTS: { id: SpecialEventId; name: string; icon: string; description: string; catchup: string }[] = [
+  { id: "fragment-fair", name: "Feira dos Fragmentos", icon: "✧", description: "Cada Museu recebe três componentes relacionados às próprias infusões e pode comprar um fragmento por 2 moedas.", catchup: "As ofertas procuram primeiro receitas que você já começou." },
+  { id: "mask-tribunal", name: "Tribunal das Máscaras", icon: "⚖", description: "Purifique, sele ou condene uma relíquia amaldiçoada antes da última noite.", catchup: "Quem não possui maldição recebe proteção para a próxima peça condenada." },
+  { id: "stolen-mask-market", name: "Mercado dos Rostos Roubados", icon: "☽", description: "Aposte cinco Selos de Cera em máscaras disputadas secretamente por toda a corte.", catchup: "Empates favorecem o jogador com menos Prestígio." },
+];
+
+const STOLEN_MASKS: { id: StolenMaskId; name: string; icon: string; description: string }[] = [
+  { id: "counterfeiter", name: "Máscara do Falsário", icon: "◈", description: "Ganhe uma ativação adicional de artefato no quinto ato." },
+  { id: "usurper", name: "Máscara do Usurpador", icon: "♛", description: "Prepare 3 moedas de desconto para o próximo lote vencido." },
+  { id: "creditor", name: "Máscara do Credor", icon: "▥", description: "A corte devolve até 3 moedas na sua próxima compra entre Museus." },
+  { id: "guardian", name: "Máscara do Guardião", icon: "◫", description: "Receba uma proteção contra ataque e outra contra maldição." },
+];
 
 const ROOT_TALENTS = ["patron-purse", "veiled-glimpse", "radiant-seal", "silver-tongue", "salt-seal"];
 
@@ -265,10 +293,11 @@ const ACT_TEXTS = [
   "Roman rege a abertura enquanto Dialgo escuta os ossos, Feliciano embaralha o destino, Cajango fecha o punho e Dimas observa em silêncio.",
   "Galthak protege os convidados. Haika Kimira convoca os elementos e Giovana ri das estratégias que ainda parecem sensatas.",
   "Os Itens Proibidos foram escolhidos. Daniel Ramos encara o dragão; todos temem que FABIANA reescreva a própria noite.",
-  "Soa a última badalada. As crônicas dos vinte e nove nomes agora pertencem aos Museus da corte.",
+  "Os Museus se preparam para a escolha do último grande evento. Fragmentos, máscaras e maldições atravessam o salão.",
+  "Soa a quinta e última badalada. As crônicas dos vinte e nove nomes agora pertencem aos Museus da corte.",
 ];
 
-const EMPTY_GAME: GameState = { phase: "intro", players: [], deck: [], lotIndex: 0, act: 1, status: "announcement", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, pendingOffer: null, rewardGranted: false };
+const EMPTY_GAME: GameState = { phase: "intro", players: [], deck: [], lotIndex: 0, act: 1, status: "announcement", auction: null, lastAward: null, log: [], scores: [], voteOutcome: null, legendVotes: {}, specialEventVotes: {}, specialEventId: null, specialEventChoices: {}, specialEventOptions: {}, specialEventResults: [], pendingOffer: null, rewardGranted: false };
 
 function personalizeGame(game: GameState, userId: string): GameState {
   return { ...game, players: game.players.map((player) => ({ ...player, isHuman: player.userId === userId })) };
@@ -298,7 +327,7 @@ function createDeckDraft(): { deck: Relic[]; protectedIds: Set<string> } {
   const recipes = [firstRecipe, secondRecipe].filter((recipe): recipe is FusionRecipe => Boolean(recipe));
   const protectedIds = new Set(recipes.flatMap((recipe) => recipe.components));
   const guaranteed = RELICS.filter((relic) => protectedIds.has(relic.id));
-  const fillers = shuffle(RELICS.filter((relic) => !protectedIds.has(relic.id))).slice(0, 12 - guaranteed.length);
+  const fillers = shuffle(RELICS.filter((relic) => !protectedIds.has(relic.id))).slice(0, TOTAL_LOTS - guaranteed.length);
   const deck = shuffle([...guaranteed, ...fillers]);
   const disposable = deck.findIndex((relic) => !protectedIds.has(relic.id));
   if (disposable >= 0 && disposable !== 6) [deck[6], deck[disposable]] = [deck[disposable], deck[6]];
@@ -483,6 +512,19 @@ export function passTurn(game: GameState, playerId: string, forced = false): Gam
   return advanceOrResolve({ ...game, players, auction: updated, log: appendLog(game, text) }, updated, players, playerId);
 }
 
+export function takeBotAuctionTurn(game: GameState, botId: string): GameState {
+  const auction = game.auction;
+  const bot = game.players.find((player) => player.id === botId && player.isBot);
+  if (!auction || game.status !== "bidding" || auction.turnId !== botId || !bot) return game;
+  if (bot.blockedAuctions > 0) return passTurn(game, botId, true);
+  const minimum = Math.max(auction.relic.start, auction.currentBid + 1);
+  const personality = Math.floor(stableRoll(`${bot.id}:${auction.relic.id}:${game.lotIndex}`) * 4);
+  const desire = auction.relic.prestige * 2 + (auction.relic.legendary ? 3 : 0) + personality;
+  const reserve = game.act < TOTAL_ACTS ? 2 : 0;
+  const affordable = minimum - bot.bidDiscount <= Math.max(0, bot.gold - reserve);
+  return affordable && minimum <= desire ? placeBid(game, botId, minimum) : passTurn(game, botId);
+}
+
 export function beginAuction(game: GameState): GameState {
   if (game.status !== "announcement") return game;
   const relic = game.deck[game.lotIndex];
@@ -502,7 +544,7 @@ export function beginAuction(game: GameState): GameState {
   return order.length === 0 ? finishAward(prepared, auction, players) : prepared;
 }
 
-function actionAvailable(relic: OwnedRelic): boolean { return (relic.exhaustedLots ?? 0) === 0 && (relic.power.once === "game" ? !relic.usedGame : !relic.usedAct); }
+function actionAvailable(relic: OwnedRelic): boolean { return !relic.fragment && (relic.exhaustedLots ?? 0) === 0 && (relic.power.once === "game" ? !relic.usedGame : !relic.usedAct); }
 
 function actionTimingAvailable(relic: OwnedRelic, status: GameStatus): boolean {
   if (relic.id === "fusion-death-refusing-king") return status === "announcement";
@@ -569,6 +611,175 @@ export function infusionNotebook(player: Player): InfusionNotebookEntry[] {
       ready: missingIds.length === 0,
     };
   }).filter((entry) => entry.progress > 0).sort((a, b) => Number(b.ready) - Number(a.ready) || (b.progress / b.total) - (a.progress / a.total) || a.total - b.total || a.resultName.localeCompare(b.resultName, "pt-BR"));
+}
+
+function stableRoll(seed: string): number {
+  let hash = 2166136261;
+  for (const character of seed) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function purifyOwnedRelic(relic: OwnedRelic): void {
+  relic.curseSuppressed = true;
+  relic.curseCharges = 0;
+  if (relic.transferredCurse && relic.prestige === 0) relic.prestige = 1;
+}
+
+function fragmentOptionsForPlayer(player: Player): string[] {
+  const inventoryIds = new Set(player.inventory.map((item) => item.id));
+  const regularIds = new Set(RELICS.map((relic) => relic.id));
+  const duoRecipes = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && recipe.components.every((id) => regularIds.has(id)));
+  const started = duoRecipes
+    .filter((recipe) => recipe.components.some((id) => inventoryIds.has(id)))
+    .flatMap((recipe) => recipe.components.filter((id) => !inventoryIds.has(id)));
+  const reserve = shuffle(duoRecipes.flatMap((recipe) => recipe.components).filter((id) => !inventoryIds.has(id)));
+  return [...new Set([...shuffle(started), ...reserve])].slice(0, 3);
+}
+
+function botEventVote(player: Player, act: number): SpecialEventId {
+  const index = Math.floor(stableRoll(`${player.id}:${act}:event`) * SPECIAL_EVENTS.length);
+  return SPECIAL_EVENTS[index]?.id ?? "fragment-fair";
+}
+
+function applyMaskBenefit(player: Player, maskId: StolenMaskId): void {
+  if (maskId === "counterfeiter") player.extraArtifactsAct += 1;
+  if (maskId === "usurper") player.bidDiscount += 3;
+  if (maskId === "creditor") player.tradeCharm += 3;
+  if (maskId === "guardian") { player.shield += 1; player.ward += 1; }
+}
+
+function applySpecialEventChoice(game: GameState, playerId: string, choice: string): GameState {
+  if (game.status !== "eventAction" || game.specialEventChoices?.[playerId]) return game;
+  const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
+  const player = players.find((candidate) => candidate.id === playerId);
+  if (!player || !game.specialEventId) return game;
+  const choices = { ...(game.specialEventChoices ?? {}), [playerId]: choice };
+  const results = [...(game.specialEventResults ?? [])];
+
+  if (game.specialEventId === "fragment-fair") {
+    const allowed = game.specialEventOptions?.[playerId] ?? [];
+    if (choice !== "skip" && (!allowed.includes(choice) || player.gold < 2)) return game;
+    if (choice === "skip") {
+      results.push(`${player.username} deixou os fragmentos na banca.`);
+    } else {
+      const source = RELICS.find((relic) => relic.id === choice);
+      if (!source) return game;
+      player.gold -= 2;
+      player.inventory.push({ ...source, name: `Fragmento de ${source.name}`, prestige: 0, cursed: false, curse: undefined, fragment: true, usedAct: true, usedGame: true });
+      results.push(`${player.username} comprou um fragmento de ${source.name}.`);
+    }
+  }
+
+  if (game.specialEventId === "mask-tribunal") {
+    if (choice === "ward") {
+      if (activeCurseCount(player) > 0) return game;
+      player.ward += 1;
+      results.push(`${player.username} recebeu um Selo de Sal do Tribunal.`);
+    } else if (choice === "skip") {
+      results.push(`${player.username} recusou o julgamento.`);
+    } else {
+      const [action, relicId] = choice.split(":");
+      const relic = player.inventory.find((item) => item.id === relicId && item.cursed && !item.curseSuppressed);
+      if (!relic) return game;
+      if (action === "purify") {
+        if (player.gold < 3) return game;
+        player.gold -= 3;
+        purifyOwnedRelic(relic);
+        results.push(`${player.username} purificou ${relic.name} por 3 moedas.`);
+      } else if (action === "seal") {
+        purifyOwnedRelic(relic);
+        relic.bonusPrestige = (relic.bonusPrestige ?? 0) - 1;
+        results.push(`${player.username} selou ${relic.name}, sacrificando 1 Prestígio.`);
+      } else if (action === "condemn") {
+        player.inventory = player.inventory.filter((item) => item !== relic);
+        player.gold += 2;
+        results.push(`${player.username} condenou ${relic.name} e recebeu 2 moedas.`);
+      } else return game;
+    }
+  }
+
+  if (game.specialEventId === "stolen-mask-market") {
+    const [maskId, rawBid] = choice.split(":");
+    const bid = Number(rawBid);
+    if (!STOLEN_MASKS.some((mask) => mask.id === maskId) || !Number.isInteger(bid) || bid < 1 || bid > 5) return game;
+  }
+
+  return { ...game, players, specialEventChoices: choices, specialEventResults: results };
+}
+
+function finalizeSpecialEvent(game: GameState): GameState {
+  if (!game.specialEventId || game.players.some((player) => !game.specialEventChoices?.[player.id])) return game;
+  const players = game.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item })) }));
+  const results = [...(game.specialEventResults ?? [])];
+  if (game.specialEventId === "stolen-mask-market") {
+    for (const mask of STOLEN_MASKS) {
+      const contenders = players.map((player) => {
+        const [maskId, bidText] = (game.specialEventChoices?.[player.id] ?? "").split(":");
+        return { player, maskId, bid: Number(bidText) || 0 };
+      }).filter((entry) => entry.maskId === mask.id).sort((a, b) => b.bid - a.bid || visiblePrestige(a.player) - visiblePrestige(b.player) || a.player.id.localeCompare(b.player.id));
+      const winner = contenders[0];
+      if (!winner) continue;
+      applyMaskBenefit(winner.player, mask.id);
+      results.push(`${winner.player.username} conquistou ${mask.name} com ${winner.bid} Selos de Cera.`);
+    }
+  }
+  return { ...game, players, status: "eventResult", specialEventResults: results, log: appendLog(game, `${SPECIAL_EVENTS.find((event) => event.id === game.specialEventId)?.name ?? "O evento"} foi concluído.`) };
+}
+
+function prepareSpecialEvent(game: GameState, eventId: SpecialEventId): GameState {
+  const options: Record<string, string[]> = eventId === "fragment-fair"
+    ? Object.fromEntries(game.players.map((player) => [player.id, fragmentOptionsForPlayer(player)]))
+    : {};
+  let prepared: GameState = { ...game, status: "eventAction", specialEventId: eventId, specialEventChoices: {}, specialEventOptions: options, specialEventResults: [`${SPECIAL_EVENTS.find((event) => event.id === eventId)?.name} venceu a votação.`] };
+  for (const bot of prepared.players.filter((player) => player.isBot)) {
+    let choice = "skip";
+    if (eventId === "fragment-fair") choice = bot.gold >= 2 ? options[bot.id]?.[0] ?? "skip" : "skip";
+    if (eventId === "mask-tribunal") {
+      const cursed = bot.inventory.find((item) => item.cursed && !item.curseSuppressed);
+      choice = cursed ? `${bot.gold >= 3 ? "purify" : "seal"}:${cursed.id}` : "ward";
+    }
+    if (eventId === "stolen-mask-market") {
+      const mask = STOLEN_MASKS[Math.floor(stableRoll(`${bot.id}:mask`) * STOLEN_MASKS.length)] ?? STOLEN_MASKS[0];
+      const bid = 1 + Math.floor(stableRoll(`${bot.id}:seals`) * 5);
+      choice = `${mask.id}:${bid}`;
+    }
+    prepared = applySpecialEventChoice(prepared, bot.id, choice);
+  }
+  return prepared.players.every((player) => prepared.specialEventChoices?.[player.id]) ? finalizeSpecialEvent(prepared) : prepared;
+}
+
+export function beginSpecialEventVote(game: GameState): GameState {
+  const votes: Record<string, SpecialEventId> = Object.fromEntries(game.players.filter((player) => player.isBot).map((player) => [player.id, botEventVote(player, game.act)]));
+  return { ...game, status: "eventVote", specialEventVotes: votes, specialEventId: null, specialEventChoices: {}, specialEventOptions: {}, specialEventResults: [], auction: null, lastAward: null, log: appendLog(game, "A corte abriu a votação do evento da última noite.") };
+}
+
+function beginLegendVote(game: GameState): GameState {
+  const votes = Object.fromEntries(game.players.filter((player) => player.isBot).map((player) => {
+    const index = Math.floor(stableRoll(`${player.id}:${game.lotIndex}:forbidden`) * LEGENDARY_RELICS.length);
+    return [player.id, LEGENDARY_RELICS[index]?.id ?? LEGENDARY_RELICS[0].id];
+  }));
+  return { ...game, status: "legendVote", legendVotes: votes, auction: null, lastAward: null };
+}
+
+export function castSpecialEventVote(game: GameState, playerId: string, eventId: SpecialEventId): GameState {
+  if (game.status !== "eventVote" || game.specialEventVotes?.[playerId] || !SPECIAL_EVENTS.some((event) => event.id === eventId)) return game;
+  const votes = { ...(game.specialEventVotes ?? {}), [playerId]: eventId };
+  const voted = { ...game, specialEventVotes: votes, log: appendLog(game, `${game.players.find((player) => player.id === playerId)?.username ?? "Um convidado"} votou no evento final.`) };
+  if (Object.keys(votes).length < game.players.length) return voted;
+  const counts = Object.fromEntries(SPECIAL_EVENTS.map((event) => [event.id, 0])) as Record<SpecialEventId, number>;
+  Object.values(votes).forEach((id) => { counts[id] += 1; });
+  const highest = Math.max(...Object.values(counts));
+  const tied = SPECIAL_EVENTS.filter((event) => counts[event.id] === highest);
+  const winner = tied[Math.floor(stableRoll(`${game.deck.map((item) => item.id).join(":")}:event-tie`) * tied.length)] ?? tied[0];
+  return prepareSpecialEvent(voted, winner.id);
+}
+
+export function chooseSpecialEventAction(game: GameState, playerId: string, choice: string): GameState {
+  const chosen = applySpecialEventChoice(game, playerId, choice);
+  return chosen.players.every((player) => chosen.specialEventChoices?.[player.id]) ? finalizeSpecialEvent(chosen) : chosen;
 }
 
 function performFusion(game: GameState, actorId: string, recipeId: string): GameState {
@@ -688,9 +899,9 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
     const preservedPrestige = relic.prestige + (relic.bonusPrestige ?? 0);
     actor.inventory = actor.inventory.filter((item) => item.id !== relic.id);
     actor.prestigeBonus += preservedPrestige;
-    target.inventory.push({ ...relic, prestige: 0, bonusPrestige: 0, usedGame: true });
+    target.inventory.push({ ...relic, prestige: 0, bonusPrestige: 0, usedGame: true, curseCharges: 2, transferredCurse: true });
     actor.gold += (relic.power.value ?? 3) + goldenBonus;
-    message = `${actor.character.name} preservou ${preservedPrestige} Prestígios e entregou a Maçã Solar de Luna sem valor a ${target.character.name}, que recebeu sua maldição.`;
+    message = `${actor.character.name} preservou ${preservedPrestige} Prestígios e entregou a Maçã Solar de Luna a ${target.character.name}. A maldição cobrará renda duas vezes; depois, a peça valerá 1 Prestígio.`;
   } else if (relic.power.type === "exalt") {
     const amount = Math.max(2, Math.floor(actor.inventory.length / 2)); actor.prestigeBonus += amount;
     message = `O Trono de Zat elevou ${actor.character.name} em ${amount} Prestígio.`;
@@ -724,7 +935,7 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
     ownTargetRelic.usedAct = false;
     message = `${actor.character.name} recarregou ${ownTargetRelic.name}.`;
   } else if (relic.power.type === "purify" && ownTargetRelic) {
-    ownTargetRelic.curseSuppressed = true;
+    purifyOwnedRelic(ownTargetRelic);
     message = `${actor.character.name} purificou ${ownTargetRelic.name}.`;
   } else if (relic.power.type === "tradeBoost") {
     actor.tradeCharm += 4; actor.salePrestigeBoost += 2;
@@ -760,7 +971,7 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
       if (Math.random() <= Math.min(.95, .7 + markedChance)) { const stolen = Math.min(4, target.gold); target.gold -= stolen; actor.gold += stolen; target.blockedAuctions += 1; message = `A Obsessão roubou ${stolen} moedas e expulsou ${target.character.name} do próximo leilão.`; }
       else { const fine = Math.min(3, actor.gold); actor.gold -= fine; target.gold += fine; target.prestigeBonus += 1; message = `O duelo falhou: ${actor.character.name} pagou ${fine} moedas e concedeu 1 Prestígio.`; }
     } else if (relic.id === "fusion-seventh-bride" && target) { const amount = target.inventory.some((item) => item.tags.includes("Morte")) ? 3 : 2; target.prestigeBonus -= amount; actor.prestigeBonus += amount; message = `A Noiva roubou ${amount} Prestígios de ${target.character.name}.`;
-    } else if (relic.id === "fusion-profane-communion" && ownTargetRelic) { if (actor.gold < 3) return game; actor.gold -= 3; actor.prestigeBonus += 3; ownTargetRelic.curseSuppressed = true; message = `A Comunhão converteu 3 moedas em 3 Prestígios e purificou ${ownTargetRelic.name}.`;
+    } else if (relic.id === "fusion-profane-communion" && ownTargetRelic) { if (actor.gold < 3) return game; actor.gold -= 3; actor.prestigeBonus += 3; purifyOwnedRelic(ownTargetRelic); message = `A Comunhão converteu 3 moedas em 3 Prestígios e purificou ${ownTargetRelic.name}.`;
     } else if (relic.id === "fusion-nonexistent-face" && targetRelic && targetRelicOwner) { targetRelicOwner.prestigeBonus -= 1; actor.prestigeBonus += 1; targetRelic.exhaustedLots = Math.max(targetRelic.exhaustedLots ?? 0, 1); message = `${actor.character.name} roubou 1 Prestígio de ${targetRelicOwner.character.name} e silenciou ${targetRelic.name} até o próximo lote.`;
     } else if (relic.id === "fusion-sepulchral-paladin" && targetRelic && targetRelicOwner) {
       actor.riskBonus = 0;
@@ -776,11 +987,11 @@ export function executeRelicAction(game: GameState, actorId: string, relicId: st
     } else if (relic.id === "fusion-draconic-banner") { let collected = 0; let unpaid = 0; players.forEach((player) => { if (player.id !== actor.id) { const paid = Math.min(2, player.gold); player.gold -= paid; collected += paid; unpaid += 2 - paid; } }); actor.gold += collected; actor.prestigeBonus += unpaid; message = `A Marcha recolheu ${collected} moedas e converteu ${unpaid} não pagas em Prestígio.`;
     } else if (relic.id === "fusion-unpronounceable-reign") { const usurped = usurpLastAward(1, "Direito Divino"); if (!usurped) return game; return usurped;
     } else if (relic.id === "fusion-first-dawn-eye" && deckTarget) { const index = deck.findIndex((item) => item.id === deckTarget.id); const destination = Math.min(game.lotIndex + 1, deck.length - 1); if (index > destination) { deck = [...deck]; const [chosen] = deck.splice(index, 1); deck.splice(destination, 0, chosen); } actor.extraArtifactsAct += 1; message = `${deckTarget.name} será o próximo lote e ${actor.character.name} ganhou uma ativação extra.`;
-    } else if (relic.id === "fusion-red-moon-baptism" && ownTargetRelic) { ownTargetRelic.curseSuppressed = true; ownTargetRelic.usedAct = false; actor.extraArtifactsAct += 1; message = `${ownTargetRelic.name} foi purificada e recarregada; ${actor.character.name} ganhou uma ativação extra.`;
+    } else if (relic.id === "fusion-red-moon-baptism" && ownTargetRelic) { purifyOwnedRelic(ownTargetRelic); ownTargetRelic.usedAct = false; actor.extraArtifactsAct += 1; message = `${ownTargetRelic.name} foi purificada e recarregada; ${actor.character.name} ganhou uma ativação extra.`;
     } else if (relic.id === "fusion-death-refusing-king") { const lot = deck[game.lotIndex]; const price = lot.start + 3; if (actor.gold < price) return game; players.forEach((player) => { if (player.id !== actor.id) player.gold += 2; }); actor.shield = Math.max(actor.shield, 99); const order = players.map((player) => player.id); const forcedAuction: Auction = { relic: lot, currentBid: price + actor.bidDiscount, highBidder: actor.id, activeIds: order, order, turnId: null, bidders: [actor.id] }; const awarded = finishAward({ ...game, players, deck }, forcedAuction, players); return { ...awarded, log: appendLog(awarded, `${actor.character.name} pronunciou o Último Decreto e tomou ${lot.name}.`) };
     } else if (relic.id === "fusion-armed-lust-garden" && target) { const stolen = Math.ceil(target.gold / 2); target.gold -= stolen; actor.gold += stolen; target.blockedAuctions += 1; target.prestigeBonus += 2; message = `O Jardim roubou ${stolen} moedas e expulsou ${target.character.name}, que recebeu 2 Prestígios.`;
     } else if (relic.id === "fusion-hollow-saints-procession" && targetRelic && targetRelicOwner) { actor.riskBonus = 0; if (Math.random() <= Math.min(.97, .85 + markedChance)) { targetRelicOwner.inventory = targetRelicOwner.inventory.filter((item) => item.id !== targetRelic.id); actor.inventory.push(targetRelic); actor.prestigeBonus += 2; message = `A Procissão roubou ${targetRelic.name} e ganhou 2 Prestígios.`; } else { actor.prestigeBonus -= 4; message = `A Procissão falhou e perdeu 4 Prestígios.`; }
-    } else if (relic.id === "fusion-last-heretic-mass") { let purged = 0; actor.inventory.forEach((item) => { if (item.cursed && !item.curseSuppressed) { item.curseSuppressed = true; purged += 1; } }); actor.prestigeBonus += purged; players.forEach((player) => { if (player.id !== actor.id && activeCurseCount(player) > 0) player.prestigeBonus -= 1; }); message = `A Missa purificou ${purged} maldições e puniu os Museus condenados.`;
+    } else if (relic.id === "fusion-last-heretic-mass") { let purged = 0; actor.inventory.forEach((item) => { if (item.cursed && !item.curseSuppressed) { purifyOwnedRelic(item); purged += 1; } }); actor.prestigeBonus += purged; players.forEach((player) => { if (player.id !== actor.id && activeCurseCount(player) > 0) player.prestigeBonus -= 1; }); message = `A Missa purificou ${purged} maldições e puniu os Museus condenados.`;
     } else if (relic.id === "fusion-infernal-weeping-treasure") { let coins = 0; let prestige = 0; players.forEach((player) => { if (player.id !== actor.id) { if (player.gold >= 2) { player.gold -= 2; coins += 2; } else { player.prestigeBonus -= 1; prestige += 1; } } }); actor.gold += coins; actor.prestigeBonus += prestige; message = `A Auditoria recebeu ${coins} moedas e ${prestige} Prestígios.`;
     } else if (relic.id === "fusion-face-beyond-veil" && targetRelic && targetRelicOwner) { targetRelicOwner.prestigeBonus -= 2; actor.prestigeBonus += 2; targetRelic.exhaustedLots = Math.max(targetRelic.exhaustedLots ?? 0, 3); message = `${actor.character.name} roubou 2 Prestígios de ${targetRelicOwner.character.name} e silenciou ${targetRelic.name} por três lotes.`;
     } else if (relic.id === "fusion-seventh-funeral-queen" && target) { const amount = target.inventory.some((item) => item.tags.includes("Morte")) ? 3 : 2; const stolen = Math.min(amount, target.gold); target.gold -= stolen; actor.gold += stolen; target.prestigeBonus -= amount; actor.prestigeBonus += amount; message = `A Rainha roubou ${stolen} moedas e ${amount} Prestígios de ${target.character.name}.`;
@@ -822,7 +1033,7 @@ export function executeTalentAction(game: GameState, actorId: string, talentId: 
   } else if (talent.activeType === "purify") {
     const relic = actor.inventory.find((item) => item.id === targetId && item.cursed && !item.curseSuppressed);
     if (!relic || actor.gold < 3) return game;
-    actor.gold -= 3; relic.curseSuppressed = true;
+    actor.gold -= 3; purifyOwnedRelic(relic);
     message = `${actor.character.name} purificou ${relic.name} por 3 moedas.`;
   }
 
@@ -859,7 +1070,7 @@ export function proposeTrade(game: GameState, proposerId: string, buyerId: strin
   const relic = seller?.inventory.find((item) => item.id === relicId);
   const expectedProposer = kind === "buy-request" ? buyerId : sellerId;
   const normalizedAmount = Math.floor(amount);
-  if (!buyer || !seller || !relic || buyer.id === seller.id || proposerId !== expectedProposer || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
+  if (!buyer || !seller || !relic || relic.fragment || buyer.id === seller.id || proposerId !== expectedProposer || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
   const responderId = proposerId === buyerId ? sellerId : buyerId;
   const message = kind === "buy-request"
     ? `${buyer.character.name} oferece ${normalizedAmount} moedas por ${relic.name}.`
@@ -875,7 +1086,7 @@ export function counterTradeOffer(game: GameState, actorId: string, amount: numb
   const seller = game.players.find((player) => player.id === offer.sellerId);
   const relic = seller?.inventory.find((item) => item.id === offer.relicId);
   const normalizedAmount = Math.floor(amount);
-  if (!buyer || !seller || !relic || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
+  if (!buyer || !seller || !relic || relic.fragment || normalizedAmount < 1 || normalizedAmount > buyer.gold || buyer.tradesAct >= tradeLimit(buyer)) return game;
   const nextResponder = tradeProposerId(offer);
   const actor = game.players.find((player) => player.id === actorId)!;
   return { ...game, pendingOffer: { ...offer, amount: normalizedAmount, proposerId: actorId, responderId: nextResponder, status: "counter", message: `${actor.character.name} contrapropôs ${normalizedAmount} moedas por ${relic.name}.` }, log: appendLog(game, `${actor.character.name} devolveu uma contraproposta.`) };
@@ -935,7 +1146,15 @@ export function distributeIncome(game: GameState, nextIndex: number): GameState 
   const players = game.players.map((player) => {
     const curseTax = player.inventory.reduce((sum, item) => sum + (!item.curseSuppressed ? item.curse?.incomePenalty ?? 0 : 0), 0);
     const income = Math.max(0, 5 + (hasSkill(player, "court-tithe") ? 2 : 0) + (player.gold === poorest ? 2 : 0) - curseTax);
-    return { ...player, gold: player.gold + income, itemsWonAct: 0, tradesAct: 0, artifactsUsedAct: 0, activeTalentsUsed: [], shield: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, decreeStake: 0, inventory: player.inventory.map((item) => ({ ...item, usedAct: false, exhaustedLots: 0 })) };
+    const inventory = player.inventory.map((item) => {
+      const refreshed = { ...item, usedAct: false, exhaustedLots: 0 };
+      if (refreshed.transferredCurse && !refreshed.curseSuppressed && (refreshed.curseCharges ?? 0) > 0) {
+        refreshed.curseCharges = Math.max(0, (refreshed.curseCharges ?? 0) - 1);
+        if (refreshed.curseCharges === 0) purifyOwnedRelic(refreshed);
+      }
+      return refreshed;
+    });
+    return { ...player, gold: player.gold + income, itemsWonAct: 0, tradesAct: 0, artifactsUsedAct: 0, activeTalentsUsed: [], shield: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, decreeStake: 0, inventory };
   });
   return { ...game, players, lotIndex: nextIndex, act: game.act + 1, status: "actBreak", auction: null, lastAward: null, log: appendLog(game, "A corte distribuiu a renda do novo ato. Os mais pobres receberam a Esmola do Anfitrião.") };
 }
@@ -1126,15 +1345,17 @@ export default function Home() {
   useEffect(() => {
     const turnId = game.auction?.turnId;
     if (!turnId || game.status !== "bidding" || !profile || onlineRoom?.hostUserId !== profile.id) return;
-    const blockedTurn = game.players.find((player) => player.id === turnId && player.blockedAuctions > 0);
-    if (!blockedTurn) return;
+    const automatedTurn = game.players.find((player) => player.id === turnId && (player.isBot || player.blockedAuctions > 0));
+    if (!automatedTurn) return;
     const timer = window.setTimeout(() => {
       commitGame((current) => {
         const currentTurnId = current.auction?.turnId;
-        const currentBlocked = current.players.find((player) => player.id === currentTurnId && player.blockedAuctions > 0);
-        return current.status === "bidding" && currentTurnId && currentBlocked ? passTurn(current, currentTurnId, true) : current;
+        const currentPlayer = current.players.find((player) => player.id === currentTurnId);
+        if (current.status !== "bidding" || !currentTurnId || !currentPlayer) return current;
+        if (currentPlayer.isBot) return takeBotAuctionTurn(current, currentTurnId);
+        return currentPlayer.blockedAuctions > 0 ? passTurn(current, currentTurnId, true) : current;
       });
-    }, 0);
+    }, automatedTurn.isBot ? 650 : 0);
     return () => window.clearTimeout(timer);
   }, [game.status, game.auction?.turnId, game.players, onlineRoom?.hostUserId, profile?.id]);
 
@@ -1186,12 +1407,18 @@ export default function Home() {
 
   const startOnlineGame = () => {
     if (!profile || !onlineRoom || onlineRoom.hostUserId !== profile.id) return;
-    const players = onlineRoom.members.map((member, index): Player => {
-      const character = playerIdentity(member.userId, member.username, index);
-      const skills = member.skills;
-      return { id: member.userId, userId: member.userId, username: member.username, character, isHuman: member.userId === profile.id, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0, intrigueOptions: shuffle(INTRIGUES).slice(0, 3).map((intrigue) => intrigue.id), intrigueId: null, intrigueChosen: false, relicsSold: 0, hostileActions: 0, tradePartners: [] };
+    const participants = [
+      ...onlineRoom.members.map((member) => ({ id: member.userId, username: member.username, skills: member.skills, isBot: false })),
+      ...onlineRoom.bots.map((bot) => ({ id: bot.id, username: bot.name, skills: [] as string[], isBot: true })),
+    ];
+    const players = participants.map((participant, index): Player => {
+      const character = playerIdentity(participant.id, participant.username, index);
+      const skills = participant.skills;
+      const intrigueOptions = shuffle(INTRIGUES).slice(0, 3).map((intrigue) => intrigue.id);
+      const intrigueId = participant.isBot ? intrigueOptions[Math.floor(stableRoll(`${participant.id}:intrigue`) * intrigueOptions.length)] : null;
+      return { id: participant.id, userId: participant.id, username: participant.username, character, isHuman: participant.id === profile.id, isBot: participant.isBot, skills, gold: 15 + (skills.includes("patron-purse") ? 3 : 0), inventory: [], prestigeBonus: 0, ward: skills.includes("salt-seal") ? 1 : 0, itemsWonAct: 0, tradesAct: 0, bidDiscount: 0, blockedAuctions: 0, artifactsUsedAct: 0, activeTalentsUsed: [], activeTalentsUsedGame: [], shield: 0, tradeCharm: 0, salePrestigeBoost: 0, riskBonus: 0, extraArtifactsAct: 0, infusionsAct: 0, tradeTributeTo: null, decreeStake: 0, discordPatron: null, discordPenalty: 0, intrigueOptions, intrigueId, intrigueChosen: participant.isBot, relicsSold: 0, hostileActions: 0, tradePartners: [] };
     });
-    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createPersistentDeck(profile.id), status: "intrigue", log: ["Uma nova rotação sorteou 12 relíquias entre as 42 peças da Crônica. FABIANA observa enquanto as Intrigas Secretas são entregues."] };
+    const initialGame: GameState = { ...EMPTY_GAME, phase: "playing", players, deck: createPersistentDeck(profile.id), status: "intrigue", log: [`Uma nova rotação sorteou ${TOTAL_LOTS} relíquias entre as ${RELICS.length} peças da Crônica. FABIANA observa enquanto as Intrigas Secretas são entregues.`] };
     sendSocket({ type: "room:start", gameState: initialGame });
     playTone("click");
   };
@@ -1217,7 +1444,8 @@ export default function Home() {
     }
     commitGame((current) => {
       const nextIndex = current.lotIndex + 1;
-      if (nextIndex === 6) return { ...current, status: "legendVote", auction: null, lastAward: null };
+      if (nextIndex === 6) return beginLegendVote(current);
+      if (nextIndex === 12) return beginSpecialEventVote(distributeIncome(current, nextIndex));
       if (nextIndex % 3 === 0) return distributeIncome(current, nextIndex);
       const players = current.players.map((player) => ({ ...player, inventory: player.inventory.map((item) => ({ ...item, exhaustedLots: Math.max(0, (item.exhaustedLots ?? 0) - 1) })) }));
       return { ...current, players, lotIndex: nextIndex, status: "announcement", auction: null, lastAward: null };
@@ -1259,6 +1487,11 @@ export default function Home() {
       const deck = [...current.deck]; deck[6] = winner;
       return distributeIncome({ ...current, deck }, 6);
     });
+    playTone("click");
+  };
+
+  const confirmSpecialEvent = () => {
+    commitGame((current) => current.status === "eventResult" ? { ...current, status: "actBreak" } : current);
     playTone("click");
   };
 
@@ -1355,9 +1588,9 @@ export default function Home() {
 
   if (game.phase === "library") return <LibraryScreen onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} />;
 
-  if (game.phase === "lobby") return <LobbyScreen profile={profile} rooms={lobbyRooms} connectionState={connectionState} message={onlineMessage} onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} onTalents={() => setGame((current) => ({ ...current, phase: "talents" }))} onCreate={(name, maxPlayers) => { setOnlineMessage(""); sendSocket({ type: "room:create", name, maxPlayers }); }} onJoin={(roomId) => { setOnlineMessage(""); sendSocket({ type: "room:join", roomId }); }} onJoinCode={(code) => { setOnlineMessage(""); sendSocket({ type: "room:join", code }); }} />;
+  if (game.phase === "lobby") return <LobbyScreen profile={profile} rooms={lobbyRooms} connectionState={connectionState} message={onlineMessage} onBack={() => setGame((current) => ({ ...current, phase: "intro" }))} onTalents={() => setGame((current) => ({ ...current, phase: "talents" }))} onCreate={(name, mode) => { setOnlineMessage(""); sendSocket({ type: "room:create", name, mode }); }} onJoin={(roomId) => { setOnlineMessage(""); sendSocket({ type: "room:join", roomId }); }} onJoinCode={(code) => { setOnlineMessage(""); sendSocket({ type: "room:join", code }); }} />;
 
-  if (game.phase === "room" && onlineRoom) return <WaitingRoom room={onlineRoom} profile={profile} connectionState={connectionState} message={onlineMessage} onLeave={leaveRoom} onReady={(ready) => sendSocket({ type: "room:ready", ready })} onStart={startOnlineGame} />;
+  if (game.phase === "room" && onlineRoom) return <WaitingRoom room={onlineRoom} profile={profile} connectionState={connectionState} message={onlineMessage} onLeave={leaveRoom} onReady={(ready) => sendSocket({ type: "room:ready", ready })} onAddBot={() => sendSocket({ type: "room:add-bot" })} onRemoveBot={(botId) => sendSocket({ type: "room:remove-bot", botId })} onStart={startOnlineGame} />;
 
   if (game.phase === "talents") return (
     <main className="talent-screen">
@@ -1372,14 +1605,15 @@ export default function Home() {
   if (game.phase === "results") {
     const ranking = game.scores.map((score) => ({ score, player: game.players.find((player) => player.id === score.playerId)! }));
     const humanWon = ranking[0]?.player.isHuman;
-    return <main className="results-screen"><section className="results-content"><p className="eyebrow">A última badalada soou</p><h1>{humanWon ? "Você governa o baile" : `${ranking[0].player.character.name} governa o baile`}</h1><p className="selection-copy">{humanWon ? "Sua vitória rendeu 3 Lúmens." : "A corte guardou os Lúmens para o verdadeiro Soberano."}</p><div className="reward-banner"><span>✦</span><strong>{humanWon ? "+3 Lúmens" : "Nenhum Lúmen conquistado"}</strong><small>Saldo atual: {profile.lumens}</small></div><div className="podium">{ranking.map(({ score, player }, index) => { const intrigue = INTRIGUES.find((item) => item.id === score.intrigueId); return <article className={`result-card place-${index + 1}`} key={player.id}><div className="place-number">{index + 1}º</div><div className="result-sigil">{player.character.sigil}</div><h2>{player.character.name}</h2><p>{player.skills.map((id) => TALENTS.find((talent) => talent.id === id)?.name).join(" · ")}</p><strong>{score.total} Prestígio</strong>{intrigue && <div className={`result-intrigue ${score.intrigue > 0 ? "complete" : "failed"}`}><span>{intrigue.icon}</span><div><small>Intriga {score.intrigue > 0 ? "cumprida" : "fracassada"}</small><b>{intrigue.name} · {score.intrigue > 0 ? `+${score.intrigue} ✦` : "+0 ✦"}</b></div></div>}<div className="score-breakdown"><span>Relíquias <b>{score.relics}</b></span><span>Talentos e efeitos <b>{score.talents}</b></span><span>Infusões no Museu <b>{score.infusions}</b></span><span>Intriga secreta <b>+{score.intrigue}</b></span><span>Ouro <b>{score.gold}</b></span><span>Maldições <b>−{score.curses}</b></span></div>{score.fusionNames.length > 0 && <p className="combo-list">{score.fusionNames.join(" • ")}</p>}<div className="result-inventory">{player.inventory.map((item, i) => <span title={item.name} key={`${item.id}-${i}`}>{item.icon}</span>)}</div></article>; })}</div><div className="results-actions"><button className="primary-button" onClick={returnFromResults}>Voltar às salas</button></div></section></main>;
+    const solo = onlineRoom?.mode === "solo";
+    return <main className="results-screen"><section className="results-content"><p className="eyebrow">A última badalada soou</p><h1>{humanWon ? "Você governa o baile" : `${ranking[0].player.character.name} governa o baile`}</h1><p className="selection-copy">{solo ? "Partidas solo servem para testar estratégias e não geram Lúmens." : humanWon ? "Sua vitória rendeu 3 Lúmens." : "A corte guardou os Lúmens para o verdadeiro Soberano."}</p><div className="reward-banner"><span>✦</span><strong>{solo ? "Modo solo · sem Lúmens" : humanWon ? "+3 Lúmens" : "Nenhum Lúmen conquistado"}</strong><small>Saldo atual: {profile.lumens}</small></div><div className="podium">{ranking.map(({ score, player }, index) => { const intrigue = INTRIGUES.find((item) => item.id === score.intrigueId); return <article className={`result-card place-${index + 1}`} key={player.id}><div className="place-number">{index + 1}º</div><div className="result-sigil">{player.character.sigil}</div><h2>{player.character.name}</h2><p>{player.isBot ? "Autômato do Museu" : player.skills.map((id) => TALENTS.find((talent) => talent.id === id)?.name).join(" · ")}</p><strong>{score.total} Prestígio</strong>{intrigue && <div className={`result-intrigue ${score.intrigue > 0 ? "complete" : "failed"}`}><span>{intrigue.icon}</span><div><small>Intriga {score.intrigue > 0 ? "cumprida" : "fracassada"}</small><b>{intrigue.name} · {score.intrigue > 0 ? `+${score.intrigue} ✦` : "+0 ✦"}</b></div></div>}<div className="score-breakdown"><span>Relíquias <b>{score.relics}</b></span><span>Talentos e efeitos <b>{score.talents}</b></span><span>Infusões no Museu <b>{score.infusions}</b></span><span>Intriga secreta <b>+{score.intrigue}</b></span><span>Ouro <b>{score.gold}</b></span><span>Maldições <b>−{score.curses}</b></span></div>{score.fusionNames.length > 0 && <p className="combo-list">{score.fusionNames.join(" • ")}</p>}<div className="result-inventory">{player.inventory.map((item, i) => <span title={item.name} key={`${item.id}-${i}`}>{item.icon}</span>)}</div></article>; })}</div><div className="results-actions"><button className="primary-button" onClick={returnFromResults}>Voltar às salas</button></div></section></main>;
   }
 
   const canManageMuseum = game.status === "announcement" || game.status === "awarded";
   return (
     <main className="game-screen">
-      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % 3) + 1} de 3</span></div><div className="header-progress">{[1,2,3,4].map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => { setGameLibrarySection("relics"); setGameLibraryOpen(true); }}>Biblioteca</button><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button>{isRoomHost && <button className="cancel-match-button" onClick={() => setCancelConfirmOpen(true)}>Cancelar partida</button>}</div></header>
-      <section className="players-rail">{game.players.map((player) => <PlayerSeat key={player.id} player={player} isTurn={auction?.turnId === player.id} isLeader={auction?.highBidder === player.id} onClick={() => !player.isHuman && setRivalId(player.id)} />)}</section>
+      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % LOTS_PER_ACT) + 1} de {LOTS_PER_ACT}</span></div><div className="header-progress">{Array.from({ length: TOTAL_ACTS }, (_, index) => index + 1).map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => { setGameLibrarySection("relics"); setGameLibraryOpen(true); }}>Biblioteca</button><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button>{isRoomHost && <button className="cancel-match-button" onClick={() => setCancelConfirmOpen(true)}>Cancelar partida</button>}</div></header>
+      <section className="players-rail">{game.players.map((player) => <PlayerSeat key={player.id} player={player} isTurn={auction?.turnId === player.id} isLeader={auction?.highBidder === player.id} onClick={() => !player.isHuman && !player.isBot && setRivalId(player.id)} />)}</section>
 
       <section className="auction-table redesigned">
         <MuseumPanel player={human!} status={game.status} fusionCount={fusionRecipes.length} enabled={canManageMuseum} onInspect={(relic) => setDetailRelicId(relic.id)} onOpenFusion={() => setFusionOpen(true)} onOpenLibrary={() => { setGameLibrarySection("fusions"); setGameLibraryOpen(true); }} />
@@ -1388,9 +1622,12 @@ export default function Home() {
           {game.status === "intrigue" && <IntrigueSelection player={human!} players={game.players} onChoose={chooseIntrigue} />}
           {game.status === "legendVote" && <LegendVote onVote={castLegendVote} voted={Boolean(human && game.legendVotes[human.id])} votes={Object.keys(game.legendVotes).length} total={game.players.length} />}
           {game.status === "voteResult" && game.voteOutcome && <VoteResult outcome={game.voteOutcome} onConfirm={confirmLegend} canConfirm={isRoomHost} />}
-          {game.status === "actBreak" && <div className="act-interlude"><span className="interlude-number">Ato {game.act}</span><h2>{game.act === 4 ? "A Última Badalada" : game.act === 3 ? "A Galeria Proibida" : "O Salão dos Sussurros"}</h2><p>{ACT_TEXTS[game.act - 1]}</p><div className="income-note">Renda distribuída. Talentos de Fortuna e a Esmola do Anfitrião já foram aplicados.</div><button className="primary-button" disabled={!isRoomHost} onClick={() => commitGame((current) => ({ ...current, status: "announcement" }))}>{isRoomHost ? "Prosseguir" : "Aguardando o anfitrião"}</button></div>}
+          {game.status === "eventVote" && <SpecialEventVote onVote={(eventId) => commitGame((current) => castSpecialEventVote(current, human!.id, eventId))} voted={Boolean(human && game.specialEventVotes?.[human.id])} votes={Object.keys(game.specialEventVotes ?? {}).length} total={game.players.length} />}
+          {game.status === "eventAction" && <SpecialEventAction game={game} player={human!} onChoose={(choice) => commitGame((current) => chooseSpecialEventAction(current, human!.id, choice))} />}
+          {game.status === "eventResult" && <SpecialEventResult game={game} canConfirm={isRoomHost} onConfirm={confirmSpecialEvent} />}
+          {game.status === "actBreak" && <div className="act-interlude"><span className="interlude-number">Ato {game.act}</span><h2>{game.act === 5 ? "O Último Martelo" : game.act === 4 ? "A Noite das Escolhas" : game.act === 3 ? "A Galeria Proibida" : "O Salão dos Sussurros"}</h2><p>{ACT_TEXTS[game.act - 1]}</p><div className="income-note">Renda distribuída. Talentos de Fortuna e a Esmola do Anfitrião já foram aplicados.</div><button className="primary-button" disabled={!isRoomHost} onClick={() => commitGame((current) => ({ ...current, status: "announcement" }))}>{isRoomHost ? "Prosseguir" : "Aguardando o anfitrião"}</button></div>}
           {game.status === "intrigueReveal" && <IntrigueReveal players={game.players} canConfirm={isRoomHost && game.players.every((player) => Boolean(player.intrigueId))} onConfirm={finalizeGame} />}
-          {!(["intrigue", "legendVote", "voteResult", "actBreak", "intrigueReveal"] as GameStatus[]).includes(game.status) && currentRelic && <><div className={`relic-frame ${currentRelic.art ? "has-art" : ""} ${currentRelic.cursed ? "cursed" : ""} ${currentRelic.legendary ? "legendary" : ""}`}><RelicArtwork relic={currentRelic} variant="auction" /><span className="relic-number">{currentRelic.legendary ? "ITEM PROIBIDO" : `LOTE ${String(game.lotIndex + 1).padStart(2, "0")}`}</span></div><p className="relic-epithet">{currentRelic.epithet}</p><h2 className="relic-name">{currentRelic.name}</h2><div className="tag-row">{currentRelic.tags.map((tag) => <span key={tag}>{tag}</span>)}{currentRelic.cursed && <span className="curse-tag">Amaldiçoada</span>}{currentRelic.legendary && <span className="legend-tag">Lendária</span>}</div><p className="relic-lore">“{currentRelic.lore}”</p><div className="relic-stats"><div><small>Prestígio</small><strong>{currentRelic.prestige}</strong></div><div><small>Lance inicial</small><strong>{currentRelic.start}</strong></div></div>{currentRelic.curse && <div className="auction-curse-preview"><span>☠ {currentRelic.curse.name}</span><p>{currentRelic.curse.description}</p><small>{currentRelic.curse.penalty ? `Penalidade máxima: −${currentRelic.curse.penalty} Prestígio · valor mínimo ${Math.max(0, currentRelic.prestige - currentRelic.curse.penalty)}` : currentRelic.curse.incomePenalty ? `Custo econômico: −${currentRelic.curse.incomePenalty} moedas de renda por ato` : "A maldição pode ser anulada por talentos ou efeitos."}</small></div>}<div className="effect-box active-preview"><span>{currentRelic.power.name}</span><p>{currentRelic.power.description}</p><small>Uso: uma vez por {currentRelic.power.once === "act" ? "ato" : "partida"}</small></div><AuctionControls game={game} human={human!} minimumBid={minimumBid} canBid={humanCanBid} canControl={isRoomHost} turnPlayer={turnPlayer} openAuction={openAuction} bid={(amount) => { commitGame((current) => placeBid(current, human!.id, amount)); playTone("bid"); }} pass={() => commitGame((current) => passTurn(current, human!.id))} next={continueGame} /></>}
+          {!(["intrigue", "legendVote", "voteResult", "eventVote", "eventAction", "eventResult", "actBreak", "intrigueReveal"] as GameStatus[]).includes(game.status) && currentRelic && <><div className={`relic-frame ${currentRelic.art ? "has-art" : ""} ${currentRelic.cursed ? "cursed" : ""} ${currentRelic.legendary ? "legendary" : ""}`}><RelicArtwork relic={currentRelic} variant="auction" /><span className="relic-number">{currentRelic.legendary ? "ITEM PROIBIDO" : `LOTE ${String(game.lotIndex + 1).padStart(2, "0")}`}</span></div><p className="relic-epithet">{currentRelic.epithet}</p><h2 className="relic-name">{currentRelic.name}</h2><div className="tag-row">{currentRelic.tags.map((tag) => <span key={tag}>{tag}</span>)}{currentRelic.cursed && <span className="curse-tag">Amaldiçoada</span>}{currentRelic.legendary && <span className="legend-tag">Lendária</span>}</div><p className="relic-lore">“{currentRelic.lore}”</p><div className="relic-stats"><div><small>Prestígio</small><strong>{currentRelic.prestige}</strong></div><div><small>Lance inicial</small><strong>{currentRelic.start}</strong></div></div>{currentRelic.curse && <div className="auction-curse-preview"><span>☠ {currentRelic.curse.name}</span><p>{currentRelic.curse.description}</p><small>{currentRelic.curse.penalty ? `Penalidade máxima: −${currentRelic.curse.penalty} Prestígio · valor mínimo ${Math.max(0, currentRelic.prestige - currentRelic.curse.penalty)}` : currentRelic.curse.incomePenalty ? `Custo econômico: −${currentRelic.curse.incomePenalty} moedas de renda por ato` : "A maldição pode ser anulada por talentos ou efeitos."}</small></div>}<div className="effect-box active-preview"><span>{currentRelic.power.name}</span><p>{currentRelic.power.description}</p><small>Uso: uma vez por {currentRelic.power.once === "act" ? "ato" : "partida"}</small></div><AuctionControls game={game} human={human!} minimumBid={minimumBid} canBid={humanCanBid} canControl={isRoomHost} turnPlayer={turnPlayer} openAuction={openAuction} bid={(amount) => { commitGame((current) => placeBid(current, human!.id, amount)); playTone("bid"); }} pass={() => commitGame((current) => passTurn(current, human!.id))} next={continueGame} /></>}
         </section>
 
         <Dossier player={human!} relic={currentRelic} simulation={simulation} game={game} enabled={canManageMuseum} onUseTalent={(talent) => { if (talent.activeType === "bribe" || talent.activeType === "purify") setActiveTalentId(talent.id); else { commitGame((current) => executeTalentAction(current, human!.id, talent.id)); playTone("win"); } }} />
@@ -1434,7 +1671,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (profile: Profile) =
 
 function Intro({ profile, onEnter, onLibrary, onTalents, onRules, onLogout, rulesOpen, closeRules }: { profile: Profile; onEnter: () => void; onLibrary: () => void; onTalents: () => void; onRules: () => void; onLogout: () => void; rulesOpen: boolean; closeRules: () => void; }) {
   const playLabel = profile.unlockedTalents.length > 0 ? "Entrar no salão online" : "Escolher primeiro talento";
-  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para três ou quatro convidados. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span><span><b>{INTRIGUES.length}</b> intrigas</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header><div className="menu-character"><span>{profile.username.slice(0, 1).toLocaleUpperCase("pt-BR")}</span><div><small>Sua identidade de jogador</small><strong>{profile.username}</strong><p>Os talentos definem seu estilo; os nomes da lore vivem nas relíquias.</p></div></div><button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer · 3 ou 4 pessoas</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e intrigas</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar ou entrar numa mesa</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
+  return <main className="opening-screen"><div className="ambient-glow" /><button className="account-logout" onClick={onLogout}>Sair de {profile.username}</button><section className="main-menu-shell"><div className="menu-hero"><span className="menu-crest">♛</span><p className="eyebrow">O Baile das Máscaras Online apresenta</p><h1>Leilão da<br />Meia-Noite</h1><div className="gold-rule"><span>✦</span></div><p className="opening-copy">Relíquias, acordos e traições para dois a oito convidados — ou um treinamento solo com bots. O ouro conquista as peças; o Prestígio conquista a noite.</p><div className="menu-census"><span><b>{RELICS.length}</b> relíquias</span><span><b>{FUSION_RECIPES.length}</b> infusões</span><span><b>{LEGENDARY_RELICS.length}</b> proibidos</span><span><b>{INTRIGUES.length}</b> intrigas</span></div></div><div className="menu-panel"><header><div><p className="panel-kicker">Convite nominal</p><h2>Boa noite, {profile.username}</h2></div><span className="menu-lumens">✦ {profile.lumens}</span></header><div className="menu-character"><span>{profile.username.slice(0, 1).toLocaleUpperCase("pt-BR")}</span><div><small>Sua identidade de jogador</small><strong>{profile.username}</strong><p>Os talentos definem seu estilo; os nomes da lore vivem nas relíquias.</p></div></div><button className="menu-play" onClick={onEnter}><span>♜</span><div><small>Multiplayer 2–8 · solo com bots</small><strong>{playLabel}</strong></div><b>→</b></button><nav className="menu-nav-grid" aria-label="Menu principal"><button onClick={onLibrary}><span>▤</span><strong>Biblioteca</strong><small>Itens, combos e intrigas</small></button><button onClick={onTalents}><span>✦</span><strong>Patronato</strong><small>{profile.unlockedTalents.length} talentos dominados</small></button><button onClick={onRules}><span>?</span><strong>Como jogar</strong><small>Regras do baile</small></button><button onClick={onEnter}><span>♟</span><strong>Salas online</strong><small>Criar, treinar ou entrar</small></button></nav><footer><span>{profile.wins} vitória{profile.wins === 1 ? "" : "s"}</span><span>✦ {profile.lumens} Lúmens disponíveis</span></footer></div></section>{rulesOpen && <RulesModal onClose={closeRules} />}</main>;
 }
 
 function LibraryScreen({ onBack }: { onBack: () => void; }) {
@@ -1452,7 +1689,7 @@ function LibraryScreen({ onBack }: { onBack: () => void; }) {
     return !query || [recipe.result.name, recipe.result.power.name, recipe.result.power.description, ...componentNames, ...recipe.result.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query);
   });
   const resultCount = section === "relics" ? regular.length : section === "fusions" ? fusions.length : section === "forbidden" ? forbidden.length : intrigues.length;
-  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "12 destas peças são sorteadas em uma nova rotação a cada partida" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
+  return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? `${TOTAL_LOTS} destas peças são sorteadas em uma nova rotação a cada partida` : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
 }
 
 function InGameLibraryModal({ initialSection, onClose }: { initialSection: "relics" | "fusions" | "forbidden"; onClose: () => void; }) {
@@ -1487,21 +1724,22 @@ function RelicLibraryCard({ relic, forbidden = false }: { relic: Relic; forbidde
   </article>;
 }
 
-function LobbyScreen({ profile, rooms, connectionState, message, onBack, onTalents, onCreate, onJoin, onJoinCode }: { profile: Profile; rooms: LobbyRoom[]; connectionState: "connecting" | "online" | "offline"; message: string; onBack: () => void; onTalents: () => void; onCreate: (name: string, maxPlayers: 3 | 4) => void; onJoin: (roomId: string) => void; onJoinCode: (code: string) => void; }) {
+function LobbyScreen({ profile, rooms, connectionState, message, onBack, onTalents, onCreate, onJoin, onJoinCode }: { profile: Profile; rooms: LobbyRoom[]; connectionState: "connecting" | "online" | "offline"; message: string; onBack: () => void; onTalents: () => void; onCreate: (name: string, mode: RoomMode) => void; onJoin: (roomId: string) => void; onJoinCode: (code: string) => void; }) {
   const [name, setName] = useState(`Mesa de ${profile.username}`);
-  const [maxPlayers, setMaxPlayers] = useState<3 | 4>(4);
   const [code, setCode] = useState("");
   const waiting = rooms.filter((room) => room.status === "waiting");
   const playing = rooms.filter((room) => room.status === "playing");
-  return <main className="lobby-screen"><SimpleHeader onBack={onBack} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Salão online" : "○ Reconectando"}</span>} /><section className="lobby-shell"><header className="lobby-heading"><div><p className="eyebrow">Galeria pública</p><h1>Salas do baile</h1><p>Entre em uma mesa aberta ou convoque seus próprios convidados. A partida começa quando todos os lugares estiverem ocupados e prontos.</p></div><button className="text-button" onClick={onTalents}>Árvore do Patronato · {profile.unlockedTalents.length}</button></header>{message && <div className="online-notice">{message}</div>}<div className="lobby-layout"><aside className="create-room-card"><span className="room-crest">♛</span><p className="panel-kicker">Nova convocação</p><h2>Criar uma sala</h2><label>Nome da mesa<input maxLength={32} value={name} onChange={(event) => setName(event.target.value)} /></label><div className="capacity-picker"><button className={maxPlayers === 3 ? "selected" : ""} onClick={() => setMaxPlayers(3)}><strong>3</strong><span>convidados</span></button><button className={maxPlayers === 4 ? "selected" : ""} onClick={() => setMaxPlayers(4)}><strong>4</strong><span>convidados</span></button></div><button className="primary-button full" disabled={connectionState !== "online"} onClick={() => onCreate(name, maxPlayers)}>Criar mesa para {maxPlayers}</button><div className="join-code"><span>Ou entrar por código</span><div><input maxLength={6} value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="ABC123" /><button disabled={code.trim().length < 6} onClick={() => onJoinCode(code.trim())}>Entrar</button></div></div></aside><section className="rooms-board"><div className="rooms-board-title"><div><p className="panel-kicker">Mesas aguardando</p><h2>{waiting.length} sala{waiting.length === 1 ? " aberta" : "s abertas"}</h2></div><span>{playing.length} em partida</span></div><div className="room-list">{waiting.length === 0 ? <div className="empty-rooms"><span>◇</span><strong>Nenhuma mesa aguarda convidados</strong><p>Crie a primeira convocação desta noite.</p></div> : waiting.map((room) => <article className="room-card" key={room.id}><div className="room-card-icon">♜</div><div><small>Código {room.code}</small><h3>{room.name}</h3><p>Anfitrião: {room.hostName}</p></div><div className="room-capacity"><strong>{room.playerCount}/{room.maxPlayers}</strong><span>lugares</span></div><button disabled={room.playerCount >= room.maxPlayers || connectionState !== "online"} onClick={() => onJoin(room.id)}>Entrar</button></article>)}</div>{playing.length > 0 && <div className="playing-rooms"><p className="panel-kicker">Bailes em andamento</p>{playing.map((room) => <span key={room.id}>{room.name} · {room.playerCount}/{room.maxPlayers}</span>)}</div>}</section></div></section></main>;
+  return <main className="lobby-screen"><SimpleHeader onBack={onBack} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Salão online" : "○ Reconectando"}</span>} /><section className="lobby-shell"><header className="lobby-heading"><div><p className="eyebrow">Galeria pública</p><h1>Salas do baile</h1><p>Uma mesa multiplayer aceita de 2 a 8 pessoas. O anfitrião abre o baile quando todos que entraram estiverem prontos.</p></div><button className="text-button" onClick={onTalents}>Árvore do Patronato · {profile.unlockedTalents.length}</button></header>{message && <div className="online-notice">{message}</div>}<div className="lobby-layout"><aside className="create-room-card"><span className="room-crest">♛</span><p className="panel-kicker">Nova convocação</p><h2>Criar uma sala</h2><label>Nome da mesa<input maxLength={32} value={name} onChange={(event) => setName(event.target.value)} /></label><div className="room-mode-actions"><button className="primary-button full" disabled={connectionState !== "online"} onClick={() => onCreate(name, "multiplayer")}><span>♜</span><div><strong>Criar multiplayer</strong><small>2 a 8 amigos · gera Lúmens</small></div></button><button className="solo-room-button" disabled={connectionState !== "online"} onClick={() => onCreate(`${name} · Solo`, "solo")}><span>☽</span><div><strong>Treinar com bots</strong><small>Você escolhe de 1 a 7 · sem Lúmens</small></div></button></div><div className="join-code"><span>Ou entrar por código</span><div><input maxLength={6} value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="ABC123" /><button disabled={code.trim().length < 6} onClick={() => onJoinCode(code.trim())}>Entrar</button></div></div></aside><section className="rooms-board"><div className="rooms-board-title"><div><p className="panel-kicker">Mesas aguardando</p><h2>{waiting.length} sala{waiting.length === 1 ? " aberta" : "s abertas"}</h2></div><span>{playing.length} em partida</span></div><div className="room-list">{waiting.length === 0 ? <div className="empty-rooms"><span>◇</span><strong>Nenhuma mesa aguarda convidados</strong><p>Crie a primeira convocação desta noite.</p></div> : waiting.map((room) => <article className="room-card" key={room.id}><div className="room-card-icon">♜</div><div><small>Código {room.code}</small><h3>{room.name}</h3><p>Anfitrião: {room.hostName}</p></div><div className="room-capacity"><strong>{room.playerCount}</strong><span>de até 8</span></div><button disabled={room.playerCount >= MAX_ROOM_PLAYERS || connectionState !== "online"} onClick={() => onJoin(room.id)}>Entrar</button></article>)}</div>{playing.length > 0 && <div className="playing-rooms"><p className="panel-kicker">Bailes em andamento</p>{playing.map((room) => <span key={room.id}>{room.name} · {room.playerCount} jogadores</span>)}</div>}</section></div></section></main>;
 }
 
-function WaitingRoom({ room, profile, connectionState, message, onLeave, onReady, onStart }: { room: OnlineRoom; profile: Profile; connectionState: "connecting" | "online" | "offline"; message: string; onLeave: () => void; onReady: (ready: boolean) => void; onStart: () => void; }) {
+function WaitingRoom({ room, profile, connectionState, message, onLeave, onReady, onAddBot, onRemoveBot, onStart }: { room: OnlineRoom; profile: Profile; connectionState: "connecting" | "online" | "offline"; message: string; onLeave: () => void; onReady: (ready: boolean) => void; onAddBot: () => void; onRemoveBot: (botId: string) => void; onStart: () => void; }) {
   const me = room.members.find((member) => member.userId === profile.id);
-  const full = room.members.length === room.maxPlayers;
-  const allReady = full && room.members.every((member) => member.ready);
+  const allHumansReady = room.members.every((member) => member.ready);
   const isHost = room.hostUserId === profile.id;
-  return <main className="waiting-screen"><div className="ambient-glow" /><SimpleHeader onBack={onLeave} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Conectado" : "○ Reconectando"}</span>} /><section className="waiting-card"><p className="eyebrow">Antessala privada</p><h1>{room.name}</h1><div className="room-code-display"><span>Código para os amigos</span><strong>{room.code}</strong><button onClick={() => void navigator.clipboard?.writeText(room.code)}>Copiar</button></div>{message && <div className="online-notice">{message}</div>}<div className={`waiting-seats seats-${room.maxPlayers}`}>{Array.from({ length: room.maxPlayers }, (_, seat) => { const member = room.members[seat]; return member ? <article className={`waiting-seat ${member.ready ? "ready" : ""} ${member.online ? "online" : "offline"}`} key={member.userId}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">{PLAYER_SIGILS[seat % PLAYER_SIGILS.length]}</div><h2>{member.username}{member.userId === profile.id ? " · você" : ""}</h2><p>Convidado da Meia-Noite</p><div className="seat-badges">{member.isHost && <b>ANFITRIÃO</b>}<b>{member.online ? "ONLINE" : "RECONECTANDO"}</b></div><strong className="ready-state">{member.ready ? "✓ PRONTO" : "AGUARDANDO"}</strong></article> : <article className="waiting-seat empty" key={seat}><span className="seat-number">0{seat + 1}</span><div className="waiting-sigil">◇</div><h2>Lugar vazio</h2><p>Aguardando convidado</p></article>; })}</div><div className="waiting-actions"><div><strong>{room.members.length}/{room.maxPlayers} convidados</strong><span>{!full ? `Faltam ${room.maxPlayers - room.members.length} para completar a mesa` : allReady ? "Todos aceitaram a convocação" : "Aguardando todos marcarem pronto"}</span></div><button className={me?.ready ? "ready-toggle active" : "ready-toggle"} disabled={connectionState !== "online"} onClick={() => onReady(!me?.ready)}>{me?.ready ? "✓ Estou pronto" : "Marcar como pronto"}</button>{isHost && <button className="primary-button" disabled={!allReady || connectionState !== "online"} onClick={onStart}>{allReady ? "Abrir o baile" : `Aguardar mesa de ${room.maxPlayers}`}</button>}</div></section></main>;
+  const participantCount = room.members.length + room.bots.length;
+  const validCount = room.mode === "solo" ? room.bots.length >= 1 : room.members.length >= 2;
+  const canStart = isHost && allHumansReady && validCount && participantCount <= MAX_ROOM_PLAYERS && connectionState === "online";
+  return <main className="waiting-screen"><div className="ambient-glow" /><SimpleHeader onBack={onLeave} right={<span className={`connection-pill ${connectionState}`}>{connectionState === "online" ? "● Conectado" : "○ Reconectando"}</span>} /><section className="waiting-card"><p className="eyebrow">{room.mode === "solo" ? "Galeria de treinamento" : "Antessala multiplayer"}</p><h1>{room.name}</h1>{room.mode === "multiplayer" ? <div className="room-code-display"><span>Código para os amigos</span><strong>{room.code}</strong><button onClick={() => void navigator.clipboard?.writeText(room.code)}>Copiar</button></div> : <div className="solo-warning"><span>☽</span><div><strong>Treino sem progressão</strong><p>Esta partida não concede Lúmens nem vitórias à conta.</p></div></div>}{message && <div className="online-notice">{message}</div>}<div className="waiting-seats dynamic-seats">{room.members.map((member, seat) => <article className={`waiting-seat ${member.ready ? "ready" : ""} ${member.online ? "online" : "offline"}`} key={member.userId}><span className="seat-number">{String(seat + 1).padStart(2, "0")}</span><div className="waiting-sigil">{PLAYER_SIGILS[seat % PLAYER_SIGILS.length]}</div><h2>{member.username}{member.userId === profile.id ? " · você" : ""}</h2><p>Convidado da Meia-Noite</p><div className="seat-badges">{member.isHost && <b>ANFITRIÃO</b>}<b>{member.online ? "ONLINE" : "RECONECTANDO"}</b></div><strong className="ready-state">{member.ready ? "✓ PRONTO" : "AGUARDANDO"}</strong></article>)}{room.bots.map((bot, index) => { const seat = room.members.length + index; return <article className="waiting-seat bot ready" key={bot.id}><span className="seat-number">{String(seat + 1).padStart(2, "0")}</span><div className="waiting-sigil">{PLAYER_SIGILS[seat % PLAYER_SIGILS.length]}</div><h2>{bot.name}</h2><p>Autômato do Museu</p><div className="seat-badges"><b>BOT</b><b>PRONTO</b></div>{isHost && <button className="remove-bot" onClick={() => onRemoveBot(bot.id)}>Retirar</button>}</article>; })}</div>{room.mode === "solo" && isHost && <button className="add-bot-button" disabled={participantCount >= MAX_ROOM_PLAYERS || connectionState !== "online"} onClick={onAddBot}><span>＋</span><div><strong>Adicionar {BOT_NAMES[room.bots.length] ?? "autômato"}</strong><small>{room.bots.length}/7 bots na mesa</small></div></button>}<div className="waiting-actions"><div><strong>{participantCount} participante{participantCount === 1 ? "" : "s"}</strong><span>{room.mode === "solo" ? room.bots.length === 0 ? "Adicione pelo menos um bot" : allHumansReady ? "Treino pronto para começar" : "Marque-se como pronto" : room.members.length < 2 ? "Aguardando pelo menos mais um amigo" : allHumansReady ? "O anfitrião já pode abrir o baile" : "Aguardando todos marcarem pronto"}</span></div><button className={me?.ready ? "ready-toggle active" : "ready-toggle"} disabled={connectionState !== "online"} onClick={() => onReady(!me?.ready)}>{me?.ready ? "✓ Estou pronto" : "Marcar como pronto"}</button>{isHost && <button className="primary-button" disabled={!canStart} onClick={onStart}>{canStart ? `Abrir baile para ${participantCount}` : "Aguardando a mesa"}</button>}</div></section></main>;
 }
 
 function SimpleHeader({ onBack, right }: { onBack: () => void; right: React.ReactNode }) {
@@ -1509,7 +1747,7 @@ function SimpleHeader({ onBack, right }: { onBack: () => void; right: React.Reac
 }
 
 function PlayerSeat({ player, isTurn, isLeader, onClick }: { player: Player; isTurn: boolean; isLeader: boolean; onClick: () => void; }) {
-  return <button className={`player-seat ${player.isHuman ? "human" : "rival"} ${isTurn ? "turn" : ""} ${isLeader ? "leader" : ""}`} onClick={onClick}><div className="seat-portrait">{player.character.sigil}{isLeader && <span className="leader-crown">♛</span>}</div><div className="seat-identity"><strong>{player.username}{player.isHuman && <small> você</small>}</strong><span>{player.isHuman ? "Seu Museu" : "Clique para negociar"}</span></div><div className="seat-resources"><span>● {player.gold}</span><span>✦ {visiblePrestige(player)}</span></div><div className="mini-inventory">{player.inventory.length === 0 ? <span>Sem relíquias</span> : player.inventory.slice(-6).map((item, index) => <b title={item.name} key={`${item.id}-${index}`}>{item.icon}</b>)}</div></button>;
+  return <button className={`player-seat ${player.isHuman ? "human" : player.isBot ? "bot" : "rival"} ${isTurn ? "turn" : ""} ${isLeader ? "leader" : ""}`} onClick={onClick} disabled={player.isBot}><div className="seat-portrait">{player.character.sigil}{isLeader && <span className="leader-crown">♛</span>}</div><div className="seat-identity"><strong>{player.username}{player.isHuman && <small> você</small>}</strong><span>{player.isHuman ? "Seu Museu" : player.isBot ? "Autômato do Museu" : "Clique para negociar"}</span></div><div className="seat-resources"><span>● {player.gold}</span><span>✦ {visiblePrestige(player)}</span></div><div className="mini-inventory">{player.inventory.length === 0 ? <span>Sem relíquias</span> : player.inventory.slice(-6).map((item, index) => <b title={item.name} key={`${item.id}-${index}`}>{item.icon}</b>)}</div></button>;
 }
 
 function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFusion, onOpenLibrary }: { player: Player; status: GameStatus; fusionCount: number; enabled: boolean; onInspect: (relic: OwnedRelic) => void; onOpenFusion: () => void; onOpenLibrary: () => void; }) {
@@ -1526,7 +1764,7 @@ function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFu
     <header><div><p className="panel-kicker">Seu Museu</p><h2>{player.inventory.length} relíquias</h2></div><span className="museum-prestige">✦ {visiblePrestige(player)}</span></header>
     {notebook.length > 0 && <details className="infusion-notebook" open={notebookOpen} onToggle={(event) => setNotebookOpen(event.currentTarget.open)}><summary><span>✧</span><div><strong>Caderno de Infusões</strong><small>Conselhos do Curador do Museu</small></div><b title={readyNotebookCount > 0 ? `${readyNotebookCount} infusão pronta` : `${fullNotebook.length} receitas possíveis`}>{readyNotebookCount || fullNotebook.length}</b></summary><div className="notebook-pages">{notebook.map((entry) => <article className={entry.ready ? "ready" : ""} key={entry.recipeId}><span>{entry.resultIcon}</span><div><strong>{entry.resultName}</strong><p>{entry.ready ? "Patrono, as peças estão prontas. Podemos realizar a infusão." : `Patrono, falta ${entry.missingNames.join(" e ")} para concluir esta obra.`}</p><small>{entry.progress}/{entry.total} peças · {entry.ownedNames.join(" · ")}</small></div></article>)}</div><button type="button" onClick={onOpenLibrary}>Consultar todas as receitas</button></details>}
     {fusionCount > 0 && <button className="fusion-alert" disabled={!enabled || player.infusionsAct >= 1} onClick={onOpenFusion}><span>✧</span><div><strong>{fusionCount} infusão{fusionCount === 1 ? " disponível" : "ões disponíveis"}</strong><small>{player.infusionsAct >= 1 ? "Infusão do ato já realizada" : "Combine relíquias do Museu"}</small></div></button>}
-    <div className="museum-grid">{player.inventory.length === 0 ? <div className="empty-museum"><span>◇</span><strong>As vitrines estão vazias</strong><p>Suas relíquias aparecerão aqui.</p></div> : player.inventory.map((relic, index) => { const cursed = relic.cursed && !relic.curseSuppressed; const available = actionAvailable(relic); const infusionLinks = infusionRecipesForRelic(relic.id); return <button className={`museum-tile ${relic.art ? "has-art" : ""} ${cursed ? "cursed" : ""} ${relic.fusionTier ? "fused" : ""} ${infusionLinks.length > 0 ? "infusion-ingredient" : ""}`} key={`${relic.id}-${index}`} onClick={() => onInspect(relic)}><RelicArtwork relic={relic} variant="museum" /><span className="tile-copy"><strong>{relic.name}</strong><small>✦ {relic.prestige + (relic.bonusPrestige ?? 0)} · {(relic.exhaustedLots ?? 0) > 0 ? "infusão estabilizando" : available ? "poder pronto" : "poder usado"}</small></span>{infusionLinks.length > 0 && <b className="tile-infusion-hint" title={`${infusionLinks.length} receita${infusionLinks.length === 1 ? " possível" : "s possíveis"}`}>✧</b>}{relic.fusionTier && <b className="tile-fusion">{relic.fusionTier === 3 ? "III" : "II"}</b>}{cursed && <b className="tile-curse">☠</b>}</button>; })}</div>
+    <div className="museum-grid">{player.inventory.length === 0 ? <div className="empty-museum"><span>◇</span><strong>As vitrines estão vazias</strong><p>Suas relíquias aparecerão aqui.</p></div> : player.inventory.map((relic, index) => { const cursed = relic.cursed && !relic.curseSuppressed; const available = actionAvailable(relic); const infusionLinks = infusionRecipesForRelic(relic.id); return <button className={`museum-tile ${relic.art ? "has-art" : ""} ${cursed ? "cursed" : ""} ${relic.fusionTier ? "fused" : ""} ${relic.fragment ? "fragment" : ""} ${infusionLinks.length > 0 ? "infusion-ingredient" : ""}`} key={`${relic.id}-${index}`} onClick={() => onInspect(relic)}><RelicArtwork relic={relic} variant="museum" /><span className="tile-copy"><strong>{relic.name}</strong><small>{relic.fragment ? "Fragmento de infusão · não negociável" : `✦ ${relic.prestige + (relic.bonusPrestige ?? 0)} · ${(relic.exhaustedLots ?? 0) > 0 ? "infusão estabilizando" : available ? "poder pronto" : "poder usado"}`}</small></span>{relic.fragment && <b className="tile-fragment">FRAG.</b>}{infusionLinks.length > 0 && <b className="tile-infusion-hint" title={`${infusionLinks.length} receita${infusionLinks.length === 1 ? " possível" : "s possíveis"}`}>✧</b>}{relic.fusionTier && <b className="tile-fusion">{relic.fusionTier === 3 ? "III" : "II"}</b>}{cursed && <b className="tile-curse">☠</b>}</button>; })}</div>
     <footer><span>Artefatos ativados neste ato</span><strong>{player.artifactsUsedAct}/{artifactLimit(player)}</strong></footer>
   </aside>;
 }
@@ -1534,7 +1772,7 @@ function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFu
 function AuctionControls({ game, human, minimumBid, canBid, canControl, turnPlayer, openAuction, bid, pass, next }: { game: GameState; human: Player; minimumBid: number; canBid: boolean; canControl: boolean; turnPlayer?: Player; openAuction: () => void; bid: (amount: number) => void; pass: () => void; next: () => void; }) {
   if (game.status === "announcement") return <div className="hammer-controls"><div><span>O Anfitrião aguarda</span><strong>O lote começa em {game.deck[game.lotIndex].start} moedas</strong></div><button className="primary-button" disabled={!canControl} onClick={openAuction}>{canControl ? "Abrir leilão" : "Aguardando o anfitrião"}</button></div>;
   if (game.status === "bidding") return <div className="hammer-controls bidding"><div className="current-offer"><span>Lance atual</span><strong>{game.auction?.highBidder ? game.auction.currentBid : "—"}</strong><small>{game.auction?.highBidder ? game.players.find((player) => player.id === game.auction?.highBidder)?.character.name : "Nenhuma oferta"}</small></div>{turnPlayer?.isHuman && human.blockedAuctions === 0 ? <div className="bid-actions"><button disabled={!canBid} onClick={() => bid(minimumBid)}>Oferecer {minimumBid}</button><button disabled={!canBid || minimumBid + 2 - human.bidDiscount > human.gold} onClick={() => bid(minimumBid + 2)}>Subir para {minimumBid + 2}</button><button className="pass-button" onClick={pass}>Abandonar</button></div> : <div className="thinking-wrap"><span>{human.blockedAuctions > 0 && turnPlayer?.isHuman ? "Você foi enfeitiçado…" : `${turnPlayer?.character.name ?? "A corte"} está decidindo…`}</span><div className="thinking"><i /><i /><i /></div></div>}</div>;
-  if (game.status === "awarded" && game.lastAward) return <div className="hammer-controls awarded"><div><span>{game.lastAward.winnerId ? "Martelo batido" : "Lote recusado"}</span><strong>{game.lastAward.winnerId ? `${game.players.find((player) => player.id === game.lastAward?.winnerId)?.username} pagou ${game.lastAward.price}` : game.lastAward.message}</strong><small>{game.lastAward.message}</small></div><button className="primary-button" disabled={!canControl} onClick={next}>{canControl ? game.lotIndex === game.deck.length - 1 ? "Revelar as intrigas" : game.lotIndex === 5 ? "Votação proibida" : (game.lotIndex + 1) % 3 === 0 ? "Encerrar ato" : "Próximo lote" : "Aguardando o anfitrião"}</button></div>;
+  if (game.status === "awarded" && game.lastAward) return <div className="hammer-controls awarded"><div><span>{game.lastAward.winnerId ? "Martelo batido" : "Lote recusado"}</span><strong>{game.lastAward.winnerId ? `${game.players.find((player) => player.id === game.lastAward?.winnerId)?.username} pagou ${game.lastAward.price}` : game.lastAward.message}</strong><small>{game.lastAward.message}</small></div><button className="primary-button" disabled={!canControl} onClick={next}>{canControl ? game.lotIndex === game.deck.length - 1 ? "Revelar as intrigas" : game.lotIndex === 5 ? "Votação proibida" : game.lotIndex === 11 ? "Votar no evento final" : (game.lotIndex + 1) % LOTS_PER_ACT === 0 ? "Encerrar ato" : "Próximo lote" : "Aguardando o anfitrião"}</button></div>;
   return null;
 }
 
@@ -1553,7 +1791,7 @@ function Dossier({ player, relic, simulation, game, enabled, onUseTalent }: { pl
     if (talent.activeType === "prioritySeal") return true;
     return true;
   };
-  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["intrigue","legendVote","voteResult","actBreak","intrigueReveal"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{artifactLimit(player)}</b></span></section>{intrigue && intrigueState && <section className={`secret-intrigue ${intrigueState.complete ? "complete" : ""}`}><header><span>{intrigue.icon}</span><div><small>Sua Intriga Secreta</small><strong>{intrigue.name}</strong></div><b>+{intrigue.reward} ✦</b></header><p>{intrigue.description}</p><div><i style={{ width: `${Math.min(100, (intrigueState.current / intrigueState.target) * 100)}%` }} /></div><small>{intrigueState.label}</small></section>}{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Podem subir 3 moedas: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
+  return <aside className="dossier-panel compact"><div className="dossier-identity"><span>{player.character.sigil}</span><div><p className="panel-kicker">{player.character.title}</p><h2>{player.character.name}</h2></div></div><div className="resource-cards"><div><span>Ouro</span><strong>● {player.gold}</strong></div><div><span>Prestígio</span><strong>✦ {visiblePrestige(player)}</strong></div></div>{relic && simulation && !["intrigue","legendVote","voteResult","eventVote","eventAction","eventResult","actBreak","intrigueReveal"].includes(game.status) && <div className="purchase-simulation compact"><span>Se conquistar o lote</span><strong>✦ {visiblePrestige(player)} → {Math.max(0, visiblePrestige(player) + simulation.total)}</strong><p>{simulation.total >= 0 ? "+" : ""}{simulation.total} Prestígio estimado</p>{hasSkill(player,"appraiser-eye") && <div className="simulation-detail"><small>Peça +{simulation.base}</small><small>Build +{simulation.talents}</small><small>Infusões futuras</small><small>Maldição −{simulation.curse}</small></div>}</div>}<section className="quick-status"><span>Próxima renda <b>+{Math.max(0, 5 + (hasSkill(player,"court-tithe") ? 2 : 0) - incomeTax)} ●</b></span><span>Maldições <b>{activeCurseCount(player)}</b></span><span>Artefatos <b>{player.artifactsUsedAct}/{artifactLimit(player)}</b></span></section>{intrigue && intrigueState && <section className={`secret-intrigue ${intrigueState.complete ? "complete" : ""}`}><header><span>{intrigue.icon}</span><div><small>Sua Intriga Secreta</small><strong>{intrigue.name}</strong></div><b>+{intrigue.reward} ✦</b></header><p>{intrigue.description}</p><div><i style={{ width: `${Math.min(100, (intrigueState.current / intrigueState.target) * 100)}%` }} /></div><small>{intrigueState.label}</small></section>}{activeTalents.length > 0 && <section className="active-build"><p className="panel-kicker">Ações da build</p>{activeTalents.map((talent) => { const used = player.activeTalentsUsed.includes(talent.id) || player.activeTalentsUsedGame.includes(talent.id); return <button key={talent.id} disabled={!canUseTalent(talent)} onClick={() => onUseTalent(talent)}><span>{talent.icon}</span><div><strong>{talent.name}</strong><small>{used ? "Já usada" : talent.description}</small></div></button>; })}</section>}{hasSkill(player,"veiled-glimpse") && game.deck[game.lotIndex + 1] && <div className="vision-box"><span>◈ Próxima relíquia</span><strong>{game.deck[game.lotIndex + 1].name}</strong></div>}{interest.length > 0 && <div className="interest-note">▤ Podem subir 3 moedas: {interest.join(" e ")}</div>}<section className="event-log compact-log"><p className="panel-kicker">Sussurros</p>{game.log.slice(0,3).map((entry,index) => <p className={index === 0 ? "latest" : ""} key={`${entry}-${index}`}>{entry}</p>)}</section></aside>;
 }
 
 function IntrigueSelection({ player, players, onChoose }: { player: Player; players: Player[]; onChoose: (id: string) => void; }) {
@@ -1577,6 +1815,27 @@ function VoteResult({ outcome, onConfirm, canConfirm }: { outcome: VoteOutcome; 
   return <div className="vote-result"><span className="forbidden-mark">{winner.icon}</span><p className="eyebrow">A corte decidiu</p><h2>{winner.name}</h2><p>{winner.power.description}</p><div className="vote-tally">{LEGENDARY_RELICS.map((relic) => <span key={relic.id}>{relic.icon} {outcome.counts[relic.id]} voto{outcome.counts[relic.id] === 1 ? "" : "s"}</span>)}</div><button className="primary-button" disabled={!canConfirm} onClick={onConfirm}>{canConfirm ? "Levar ao próximo leilão" : "Aguardando o anfitrião"}</button></div>;
 }
 
+function SpecialEventVote({ onVote, voted, votes, total }: { onVote: (id: SpecialEventId) => void; voted: boolean; votes: number; total: number; }) {
+  return <div className="special-event-view event-vote-view"><p className="eyebrow">Antes do quinto ato · {votes}/{total} votos</p><h2>Qual ritual encerrará a noite?</h2><p>{voted ? "Seu voto foi selado. Os demais convidados ainda deliberam." : "A corte escolhe um evento. Cada opção ajuda jogadores diferentes a preparar a última disputa."}</p><div className="special-event-grid">{SPECIAL_EVENTS.map((event) => <button key={event.id} disabled={voted} onClick={() => onVote(event.id)}><span>{event.icon}</span><strong>{event.name}</strong><p>{event.description}</p><small>{event.catchup}</small><b>{voted ? "Voto depositado" : "Escolher este evento"}</b></button>)}</div></div>;
+}
+
+function SpecialEventAction({ game, player, onChoose }: { game: GameState; player: Player; onChoose: (choice: string) => void; }) {
+  const event = SPECIAL_EVENTS.find((item) => item.id === game.specialEventId);
+  const alreadyChosen = Boolean(game.specialEventChoices?.[player.id]);
+  const [maskId, setMaskId] = useState<StolenMaskId>("counterfeiter");
+  const [sealBid, setSealBid] = useState(3);
+  const cursed = player.inventory.filter((item) => item.cursed && !item.curseSuppressed);
+  const options = (game.specialEventOptions?.[player.id] ?? []).map((id) => RELICS.find((item) => item.id === id)).filter((item): item is Relic => Boolean(item));
+  if (!event) return null;
+  if (alreadyChosen) return <div className="special-event-view event-wait-view"><span className="event-main-icon">{event.icon}</span><p className="eyebrow">Escolha registrada</p><h2>{event.name}</h2><p>Seu ritual foi realizado. Aguarde os outros convidados concluírem suas decisões.</p><b>{Object.keys(game.specialEventChoices ?? {}).length}/{game.players.length} prontos</b></div>;
+  return <div className="special-event-view event-action-view"><span className="event-main-icon">{event.icon}</span><p className="eyebrow">Evento da última noite</p><h2>{event.name}</h2><p>{event.description}</p>{game.specialEventId === "fragment-fair" && <div className="event-choice-list fragment-choices">{options.map((relic) => <button disabled={player.gold < 2} key={relic.id} onClick={() => onChoose(relic.id)}><span>{relic.icon}</span><div><strong>Fragmento de {relic.name}</strong><small>Completa receitas compatíveis · não vale Prestígio</small></div><b>2 ●</b></button>)}<button className="event-skip" onClick={() => onChoose("skip")}>Não comprar fragmento</button></div>}{game.specialEventId === "mask-tribunal" && <div className="event-choice-list tribunal-choices">{cursed.length === 0 ? <button onClick={() => onChoose("ward")}><span>◫</span><div><strong>Receber o Selo de Sal</strong><small>Anula a próxima maldição adquirida.</small></div><b>Grátis</b></button> : cursed.flatMap((relic, index) => [<button disabled={player.gold < 3} key={`purify-${relic.id}-${index}`} onClick={() => onChoose(`purify:${relic.id}`)}><span>✣</span><div><strong>Purificar {relic.name}</strong><small>Anula a maldição permanentemente.</small></div><b>3 ●</b></button>, <button key={`seal-${relic.id}-${index}`} onClick={() => onChoose(`seal:${relic.id}`)}><span>⚿</span><div><strong>Selar {relic.name}</strong><small>Anula a maldição, mas a peça perde 1 Prestígio.</small></div><b>−1 ✦</b></button>, <button key={`condemn-${relic.id}-${index}`} onClick={() => onChoose(`condemn:${relic.id}`)}><span>†</span><div><strong>Condenar {relic.name}</strong><small>Destrói a peça e devolve 2 moedas.</small></div><b>+2 ●</b></button>])}<button className="event-skip" onClick={() => onChoose("skip")}>Recusar o julgamento</button></div>}{game.specialEventId === "stolen-mask-market" && <div className="mask-market"><div className="mask-options">{STOLEN_MASKS.map((mask) => <button className={maskId === mask.id ? "selected" : ""} key={mask.id} onClick={() => setMaskId(mask.id)}><span>{mask.icon}</span><strong>{mask.name}</strong><small>{mask.description}</small></button>)}</div><label className="seal-bid"><span>Selos de Cera apostados</span><input type="range" min="1" max="5" value={sealBid} onChange={(event) => setSealBid(Number(event.target.value))} /><b>{sealBid}</b><small>Empates favorecem quem possui menos Prestígio.</small></label><button className="primary-button full" onClick={() => onChoose(`${maskId}:${sealBid}`)}>Disputar esta máscara</button></div>}</div>;
+}
+
+function SpecialEventResult({ game, canConfirm, onConfirm }: { game: GameState; canConfirm: boolean; onConfirm: () => void; }) {
+  const event = SPECIAL_EVENTS.find((item) => item.id === game.specialEventId);
+  return <div className="special-event-view event-result-view"><span className="event-main-icon">{event?.icon ?? "✦"}</span><p className="eyebrow">O ritual foi concluído</p><h2>{event?.name}</h2><div className="event-result-list">{(game.specialEventResults ?? []).map((result, index) => <p key={`${result}-${index}`}>{result}</p>)}</div><button className="primary-button" disabled={!canConfirm} onClick={onConfirm}>{canConfirm ? "Abrir o quinto ato" : "Aguardando o anfitrião"}</button></div>;
+}
+
 function ActionTargetModal({ relic, actor, game, onClose, onTarget }: { relic: OwnedRelic; actor: Player; game: GameState; onClose: () => void; onTarget: (id: string) => void; }) {
   const kind = relic.power.target === true ? "player" : relic.power.target;
   const players = validTargets(game.players, actor.id, relic);
@@ -1596,7 +1855,7 @@ function RelicDetailModal({ relic, player, status, enabled, onClose, onUse }: { 
   const limit = artifactLimit(player);
   const timingReady = actionTimingAvailable(relic, status);
   const ready = actionAvailable(relic) && timingReady && player.artifactsUsedAct < limit && !(relic.power.type === "convert" && player.gold < 3);
-  const detailContent = <><p className="eyebrow">{relic.fusionTier ? `Infusão ${relic.fusionTier === 3 ? "tripla" : "dupla"}` : "Peça do seu Museu"}</p><h2>{relic.name}</h2><div className="detail-tags">{relic.tags.map((tag) => <span key={tag}>{tag}</span>)}</div><div className="detail-power"><strong>{relic.power.name}</strong><p>{relic.power.description}</p><small>Uma vez por {relic.power.once === "act" ? "ato" : "partida"}</small></div>{relic.curse && <div className={`detail-curse ${relic.curseSuppressed ? "suppressed" : ""}`}><strong>☠ {relic.curse.name}</strong><p>{relic.curseSuppressed ? "Esta maldição foi anulada." : relic.curse.description}</p></div>}<button className="primary-button full" disabled={!enabled || !ready} onClick={onUse}>{(relic.exhaustedLots ?? 0) > 0 ? "Infusão estabilizando" : !timingReady ? relic.id === "fusion-death-refusing-king" ? "Use durante a apresentação" : "Use depois da batida do martelo" : player.artifactsUsedAct >= limit ? `Limite de ${limit} artefatos atingido` : !actionAvailable(relic) ? "Poder já usado" : enabled ? "Ativar artefato" : "Disponível entre leilões"}</button></>;
+  const detailContent = <><p className="eyebrow">{relic.fragment ? "Fragmento da Feira" : relic.fusionTier ? `Infusão ${relic.fusionTier === 3 ? "tripla" : "dupla"}` : "Peça do seu Museu"}</p><h2>{relic.name}</h2><div className="detail-tags">{relic.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>{relic.fragment ? <div className="detail-power"><strong>Componente de infusão</strong><p>Este fragmento substitui a relíquia original numa receita compatível. Ele não vale Prestígio, não ativa poder e não pode ser negociado.</p></div> : <div className="detail-power"><strong>{relic.power.name}</strong><p>{relic.power.description}</p><small>Uma vez por {relic.power.once === "act" ? "ato" : "partida"}</small></div>}{relic.curse && <div className={`detail-curse ${relic.curseSuppressed ? "suppressed" : ""}`}><strong>☠ {relic.curse.name}</strong><p>{relic.curseSuppressed ? "Esta maldição foi anulada." : relic.transferredCurse ? `${relic.curse.description} Restam ${relic.curseCharges ?? 0} cobranças; depois a Maçã vale 1 Prestígio.` : relic.curse.description}</p></div>}<button className="primary-button full" disabled={!enabled || !ready} onClick={onUse}>{relic.fragment ? "Fragmento sem poder ativo" : (relic.exhaustedLots ?? 0) > 0 ? "Infusão estabilizando" : !timingReady ? relic.id === "fusion-death-refusing-king" ? "Use durante a apresentação" : "Use depois da batida do martelo" : player.artifactsUsedAct >= limit ? `Limite de ${limit} artefatos atingido` : !actionAvailable(relic) ? "Poder já usado" : enabled ? "Ativar artefato" : "Disponível entre leilões"}</button></>;
   return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className={`relic-detail-modal ${relic.art ? "has-art" : ""} ${relic.fusionTier ? "fused-detail" : ""}`}><button className="modal-close" onClick={onClose}>×</button>{relic.art ? <div className="detail-art-layout"><RelicArtwork relic={relic} variant="detail" /><div className="detail-copy">{detailContent}</div></div> : <><span className="modal-relic-icon">{relic.icon}</span>{detailContent}</>}</section></div>;
 }
 
@@ -1639,5 +1898,5 @@ function CancelGameModal({ onClose, onConfirm }: { onClose: () => void; onConfir
 }
 
 function RulesModal({ onClose }: { onClose: () => void; }) {
-  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Sele sua intriga</strong><p>Antes do primeiro lote, escolha um de três objetivos secretos. Se cumprir a condição, ganhe de 4 a 5 Prestígios na revelação final.</p></div></article><article><span>02</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias rendem Lúmens e todos os talentos comprados ficam ativos na conta.</p></div></article><article><span>03</span><div><strong>Descubra a rotação</strong><p>Cada partida sorteia 12 das {RELICS.length} relíquias. A seleção muda a cada baile, mas é idêntica e sincronizada para todos na mesma sala.</p></div></article><article><span>04</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>05</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>06</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Negociações também podem avançar sua Intriga Secreta.</p></div></article><article><span>07</span><div><strong>Vote no proibido</strong><p>A corte escolhe entre {LEGENDARY_RELICS.length} Itens Proibidos. O vencedor substitui o primeiro lote do ato seguinte e alguns deles completam infusões lendárias.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Relíquias, efeitos, ouro e Intrigas cumpridas formam o Prestígio final. Cada vitória concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
+  return <div className="modal-backdrop" role="dialog" aria-modal="true"><section className="rules-modal"><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">Regras do Anfitrião</p><h2>Como vencer o baile</h2><div className="rule-steps"><article><span>01</span><div><strong>Sele sua intriga</strong><p>Antes do primeiro lote, escolha um de três objetivos secretos. Se cumprir a condição, ganhe de 4 a 5 Prestígios na revelação final.</p></div></article><article><span>02</span><div><strong>Expanda seu patronato</strong><p>Seu primeiro talento é grátis. Vitórias multiplayer rendem Lúmens; partidas solo servem apenas para treino.</p></div></article><article><span>03</span><div><strong>Descubra a rotação</strong><p>Cada partida sorteia {TOTAL_LOTS} das {RELICS.length} relíquias em cinco atos. A seleção muda a cada baile, mas é idêntica e sincronizada para todos na sala.</p></div></article><article><span>04</span><div><strong>Crie infusões</strong><p>Receitas completas aparecem no Museu. Duplas custam 2 moedas, triplas custam 4 e a transformação é irreversível.</p></div></article><article><span>05</span><div><strong>Administre o Museu</strong><p>O limite inicial é de dois artefatos por ato. Talentos da Glória elevam esse limite para três e depois quatro; certas infusões ainda concedem ativações extras.</p></div></article><article><span>06</span><div><strong>Venda com estratégia</strong><p>Quem vende recebe o ouro combinado e também Prestígio. Ofertas e pedidos seguem a mesma regra de venda.</p></div></article><article><span>07</span><div><strong>Decida os eventos</strong><p>Depois do segundo ato a corte vota no Item Proibido. Antes do quinto, escolhe entre a Feira dos Fragmentos, o Tribunal das Máscaras e o Mercado dos Rostos Roubados.</p></div></article></div><div className="rules-note"><strong>Vitória e progressão</strong><span>Relíquias, efeitos, ouro e Intrigas cumpridas formam o Prestígio final. Cada vitória multiplayer concede 3 Lúmens ao vencedor.</span></div><button className="primary-button full" onClick={onClose}>Compreendi</button></section></div>;
 }
