@@ -288,6 +288,24 @@ test("Mercado dos Rostos Roubados desempata a favor de quem está atrás", () =>
   assert.equal(state.players.find((candidate) => candidate.id === leader.id)?.shield, 0);
 });
 
+test("Mercado resolve cada máscara separadamente pelo maior lance", () => {
+  const first = player("buyer");
+  const second = player("rival");
+  const third = player("third");
+  let state = beginSpecialEventVote(game([first, second, third]));
+  state = castSpecialEventVote(state, first.id, "stolen-mask-market");
+  state = castSpecialEventVote(state, second.id, "stolen-mask-market");
+  state = castSpecialEventVote(state, third.id, "stolen-mask-market");
+  state = chooseSpecialEventAction(state, first.id, "counterfeiter:4");
+  state = chooseSpecialEventAction(state, second.id, "counterfeiter:2");
+  state = chooseSpecialEventAction(state, third.id, "guardian:1");
+
+  assert.equal(state.status, "eventResult");
+  assert.equal(state.players.find((candidate) => candidate.id === first.id)?.extraArtifactsAct, 1);
+  assert.equal(state.players.find((candidate) => candidate.id === second.id)?.extraArtifactsAct, 0);
+  assert.equal(state.players.find((candidate) => candidate.id === third.id)?.shield, 1);
+});
+
 test("Luva Contrabandista rouba moedas no sucesso sem inverter a transferência", () => {
   const glove = structuredClone(RELICS.find((item) => item.id === "golden-thief-glove")!);
   const actor = player("buyer", { gold: 10, inventory: [glove] });
@@ -364,6 +382,11 @@ test("Caderno de Infusões identifica peças possuídas e componentes ausentes",
   assert.equal(buriedMonarch?.total, 2);
   assert.equal(buriedMonarch?.ready, false);
   assert.deepEqual(buriedMonarch?.missingNames, ["Armadura Fraturada de Zat"]);
+  assert.deepEqual(buriedMonarch?.components.map((component) => ({ name: component.name, owned: component.owned })), [
+    { name: "Coroa Fraturada de Zat", owned: true },
+    { name: "Armadura Fraturada de Zat", owned: false },
+  ]);
+  assert.equal(buriedMonarch?.cost, 2);
 });
 
 test("catálogo proibido possui oito candidatos únicos e utilizáveis", () => {

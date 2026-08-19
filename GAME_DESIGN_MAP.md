@@ -56,7 +56,7 @@ flowchart TD
 | Infusões | No máximo 1 por ato; dupla custa 2, tripla custa 4 |
 | Mercado entre Museus | Peça uma relíquia rival oferecendo ouro ou ofereça uma peça sua com preço definido; o comprador realiza 1 compra por ato, ou 2 com Contrabandista |
 | Votação proibida | Depois do sexto lote; empate é decidido aleatoriamente |
-| Evento da última noite | Antes do quinto ato; a corte escolhe Feira dos Fragmentos, Tribunal das Máscaras ou Mercado dos Rostos Roubados |
+| Evento da última noite | Antes do quinto ato; a corte escolhe Feira dos Fragmentos, Tribunal das Máscaras ou Mercado dos Rostos Roubados. No Mercado, cada máscara é uma disputa separada: vence o maior lance secreto de 1–5 Selos, com empate favorável ao menor Prestígio |
 | Vitória | Maior Prestígio final |
 
 ## Recursos e conversões

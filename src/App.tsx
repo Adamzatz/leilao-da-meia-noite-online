@@ -132,7 +132,7 @@ function playerIdentity(userId: string, username: string, seat: number): Charact
 export const SPECIAL_EVENTS: { id: SpecialEventId; name: string; icon: string; description: string; catchup: string }[] = [
   { id: "fragment-fair", name: "Feira dos Fragmentos", icon: "✧", description: "Cada Museu recebe três componentes relacionados às próprias infusões e pode comprar um fragmento por 2 moedas.", catchup: "As ofertas procuram primeiro receitas que você já começou." },
   { id: "mask-tribunal", name: "Tribunal das Máscaras", icon: "⚖", description: "Purifique, sele ou condene uma relíquia amaldiçoada antes da última noite.", catchup: "Quem não possui maldição recebe proteção para a próxima peça condenada." },
-  { id: "stolen-mask-market", name: "Mercado dos Rostos Roubados", icon: "☽", description: "Aposte cinco Selos de Cera em máscaras disputadas secretamente por toda a corte.", catchup: "Empates favorecem o jogador com menos Prestígio." },
+  { id: "stolen-mask-market", name: "Mercado dos Rostos Roubados", icon: "☽", description: "Cada convidado recebe cinco Selos temporários, escolhe uma máscara e faz um lance secreto nela.", catchup: "Cada máscara tem sua própria disputa; o maior lance vence. Empates favorecem quem possui menos Prestígio." },
 ];
 
 const STOLEN_MASKS: { id: StolenMaskId; name: string; icon: string; description: string }[] = [
@@ -576,6 +576,8 @@ type InfusionNotebookEntry = {
   recipeId: string;
   resultName: string;
   resultIcon: string;
+  cost: number;
+  components: { id: string; name: string; icon: string; owned: boolean }[];
   ownedNames: string[];
   missingNames: string[];
   progress: number;
@@ -600,10 +602,16 @@ export function infusionNotebook(player: Player): InfusionNotebookEntry[] {
     const route = upgradeRoute && routeScore(upgradeRoute) > routeScore(directRoute) ? upgradeRoute : directRoute;
     const ownedIds = route.filter((id) => inventoryIds.has(id));
     const missingIds = route.filter((id) => !inventoryIds.has(id));
+    const components = route.map((id) => {
+      const item = infusionCatalogueItem(id);
+      return { id, name: item?.name ?? id, icon: item?.icon ?? "◇", owned: inventoryIds.has(id) };
+    });
     return {
       recipeId: recipe.id,
       resultName: recipe.result.name,
       resultIcon: recipe.result.icon,
+      cost: recipe.cost,
+      components,
       ownedNames: ownedIds.map((id) => infusionCatalogueItem(id)?.name ?? id),
       missingNames: missingIds.map((id) => infusionCatalogueItem(id)?.name ?? id),
       progress: ownedIds.length,
@@ -1762,7 +1770,18 @@ function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFu
   return <aside className="museum-panel">
     <div className={`artifact-window ${window.mode}`} aria-live="polite"><span className="artifact-window-sigil">{window.mode === "open" ? "✦" : "◷"}</span><div><small>Tempo de ativação</small><strong>{window.label}</strong><p>{window.detail}</p></div>{window.mode === "open" && <b>USE AGORA</b>}</div>
     <header><div><p className="panel-kicker">Seu Museu</p><h2>{player.inventory.length} relíquias</h2></div><span className="museum-prestige">✦ {visiblePrestige(player)}</span></header>
-    {notebook.length > 0 && <details className="infusion-notebook" open={notebookOpen} onToggle={(event) => setNotebookOpen(event.currentTarget.open)}><summary><span>✧</span><div><strong>Caderno de Infusões</strong><small>Conselhos do Curador do Museu</small></div><b title={readyNotebookCount > 0 ? `${readyNotebookCount} infusão pronta` : `${fullNotebook.length} receitas possíveis`}>{readyNotebookCount || fullNotebook.length}</b></summary><div className="notebook-pages">{notebook.map((entry) => <article className={entry.ready ? "ready" : ""} key={entry.recipeId}><span>{entry.resultIcon}</span><div><strong>{entry.resultName}</strong><p>{entry.ready ? "Patrono, as peças estão prontas. Podemos realizar a infusão." : `Patrono, falta ${entry.missingNames.join(" e ")} para concluir esta obra.`}</p><small>{entry.progress}/{entry.total} peças · {entry.ownedNames.join(" · ")}</small></div></article>)}</div><button type="button" onClick={onOpenLibrary}>Consultar todas as receitas</button></details>}
+    {notebook.length > 0 && <details className="infusion-notebook" open={notebookOpen} onToggle={(event) => setNotebookOpen(event.currentTarget.open)}>
+      <summary><span>✧</span><div><strong>Caderno de Infusões</strong><small>Acompanhe cada peça necessária</small></div><b title={readyNotebookCount > 0 ? `${readyNotebookCount} infusão pronta` : `${fullNotebook.length} receitas possíveis`}>{readyNotebookCount || fullNotebook.length}</b></summary>
+      <div className="notebook-pages">{notebook.map((entry) => {
+        const missingCount = entry.components.filter((component) => !component.owned).length;
+        return <article className={entry.ready ? "ready" : ""} key={entry.recipeId}>
+          <header className="notebook-recipe-head"><span>{entry.resultIcon}</span><div><small>{entry.ready ? "RECEITA COMPLETA" : missingCount === 1 ? "FALTA 1 PEÇA" : `FALTAM ${missingCount} PEÇAS`}</small><strong>{entry.resultName}</strong></div><b>{entry.progress}/{entry.total}</b></header>
+          <div className="notebook-requirements">{entry.components.map((component) => <div className={component.owned ? "owned" : "missing"} key={component.id}><span>{component.icon}</span><strong>{component.name}</strong><small>{component.owned ? "✓ NO MUSEU" : "✕ AINDA FALTA"}</small></div>)}</div>
+          <div className="notebook-next-step"><span>{entry.ready ? "✓" : missingCount}</span><p>{entry.ready ? "Tudo reunido. Abra a Câmara de Infusão para criar esta peça." : `Próximo objetivo: consiga ${entry.missingNames.join(" + ")}.`}</p><b title="Custo da infusão">{entry.cost} ●</b></div>
+        </article>;
+      })}</div>
+      <button type="button" onClick={onOpenLibrary}>Consultar todas as receitas</button>
+    </details>}
     {fusionCount > 0 && <button className="fusion-alert" disabled={!enabled || player.infusionsAct >= 1} onClick={onOpenFusion}><span>✧</span><div><strong>{fusionCount} infusão{fusionCount === 1 ? " disponível" : "ões disponíveis"}</strong><small>{player.infusionsAct >= 1 ? "Infusão do ato já realizada" : "Combine relíquias do Museu"}</small></div></button>}
     <div className="museum-grid">{player.inventory.length === 0 ? <div className="empty-museum"><span>◇</span><strong>As vitrines estão vazias</strong><p>Suas relíquias aparecerão aqui.</p></div> : player.inventory.map((relic, index) => { const cursed = relic.cursed && !relic.curseSuppressed; const available = actionAvailable(relic); const infusionLinks = infusionRecipesForRelic(relic.id); return <button className={`museum-tile ${relic.art ? "has-art" : ""} ${cursed ? "cursed" : ""} ${relic.fusionTier ? "fused" : ""} ${relic.fragment ? "fragment" : ""} ${infusionLinks.length > 0 ? "infusion-ingredient" : ""}`} key={`${relic.id}-${index}`} onClick={() => onInspect(relic)}><RelicArtwork relic={relic} variant="museum" /><span className="tile-copy"><strong>{relic.name}</strong><small>{relic.fragment ? "Fragmento de infusão · não negociável" : `✦ ${relic.prestige + (relic.bonusPrestige ?? 0)} · ${(relic.exhaustedLots ?? 0) > 0 ? "infusão estabilizando" : available ? "poder pronto" : "poder usado"}`}</small></span>{relic.fragment && <b className="tile-fragment">FRAG.</b>}{infusionLinks.length > 0 && <b className="tile-infusion-hint" title={`${infusionLinks.length} receita${infusionLinks.length === 1 ? " possível" : "s possíveis"}`}>✧</b>}{relic.fusionTier && <b className="tile-fusion">{relic.fusionTier === 3 ? "III" : "II"}</b>}{cursed && <b className="tile-curse">☠</b>}</button>; })}</div>
     <footer><span>Artefatos ativados neste ato</span><strong>{player.artifactsUsedAct}/{artifactLimit(player)}</strong></footer>
@@ -1824,11 +1843,44 @@ function SpecialEventAction({ game, player, onChoose }: { game: GameState; playe
   const alreadyChosen = Boolean(game.specialEventChoices?.[player.id]);
   const [maskId, setMaskId] = useState<StolenMaskId>("counterfeiter");
   const [sealBid, setSealBid] = useState(3);
+  const selectedMask = STOLEN_MASKS.find((mask) => mask.id === maskId) ?? STOLEN_MASKS[0];
   const cursed = player.inventory.filter((item) => item.cursed && !item.curseSuppressed);
   const options = (game.specialEventOptions?.[player.id] ?? []).map((id) => RELICS.find((item) => item.id === id)).filter((item): item is Relic => Boolean(item));
   if (!event) return null;
   if (alreadyChosen) return <div className="special-event-view event-wait-view"><span className="event-main-icon">{event.icon}</span><p className="eyebrow">Escolha registrada</p><h2>{event.name}</h2><p>Seu ritual foi realizado. Aguarde os outros convidados concluírem suas decisões.</p><b>{Object.keys(game.specialEventChoices ?? {}).length}/{game.players.length} prontos</b></div>;
-  return <div className="special-event-view event-action-view"><span className="event-main-icon">{event.icon}</span><p className="eyebrow">Evento da última noite</p><h2>{event.name}</h2><p>{event.description}</p>{game.specialEventId === "fragment-fair" && <div className="event-choice-list fragment-choices">{options.map((relic) => <button disabled={player.gold < 2} key={relic.id} onClick={() => onChoose(relic.id)}><span>{relic.icon}</span><div><strong>Fragmento de {relic.name}</strong><small>Completa receitas compatíveis · não vale Prestígio</small></div><b>2 ●</b></button>)}<button className="event-skip" onClick={() => onChoose("skip")}>Não comprar fragmento</button></div>}{game.specialEventId === "mask-tribunal" && <div className="event-choice-list tribunal-choices">{cursed.length === 0 ? <button onClick={() => onChoose("ward")}><span>◫</span><div><strong>Receber o Selo de Sal</strong><small>Anula a próxima maldição adquirida.</small></div><b>Grátis</b></button> : cursed.flatMap((relic, index) => [<button disabled={player.gold < 3} key={`purify-${relic.id}-${index}`} onClick={() => onChoose(`purify:${relic.id}`)}><span>✣</span><div><strong>Purificar {relic.name}</strong><small>Anula a maldição permanentemente.</small></div><b>3 ●</b></button>, <button key={`seal-${relic.id}-${index}`} onClick={() => onChoose(`seal:${relic.id}`)}><span>⚿</span><div><strong>Selar {relic.name}</strong><small>Anula a maldição, mas a peça perde 1 Prestígio.</small></div><b>−1 ✦</b></button>, <button key={`condemn-${relic.id}-${index}`} onClick={() => onChoose(`condemn:${relic.id}`)}><span>†</span><div><strong>Condenar {relic.name}</strong><small>Destrói a peça e devolve 2 moedas.</small></div><b>+2 ●</b></button>])}<button className="event-skip" onClick={() => onChoose("skip")}>Recusar o julgamento</button></div>}{game.specialEventId === "stolen-mask-market" && <div className="mask-market"><div className="mask-options">{STOLEN_MASKS.map((mask) => <button className={maskId === mask.id ? "selected" : ""} key={mask.id} onClick={() => setMaskId(mask.id)}><span>{mask.icon}</span><strong>{mask.name}</strong><small>{mask.description}</small></button>)}</div><label className="seal-bid"><span>Selos de Cera apostados</span><input type="range" min="1" max="5" value={sealBid} onChange={(event) => setSealBid(Number(event.target.value))} /><b>{sealBid}</b><small>Empates favorecem quem possui menos Prestígio.</small></label><button className="primary-button full" onClick={() => onChoose(`${maskId}:${sealBid}`)}>Disputar esta máscara</button></div>}</div>;
+  return <div className="special-event-view event-action-view">
+    <span className="event-main-icon">{event.icon}</span>
+    <p className="eyebrow">Evento da última noite</p>
+    <h2>{event.name}</h2>
+    <p>{event.description}</p>
+    {game.specialEventId === "fragment-fair" && <div className="event-choice-list fragment-choices">
+      {options.map((relic) => <button disabled={player.gold < 2} key={relic.id} onClick={() => onChoose(relic.id)}><span>{relic.icon}</span><div><strong>Fragmento de {relic.name}</strong><small>Completa receitas compatíveis · não vale Prestígio</small></div><b>2 ●</b></button>)}
+      <button className="event-skip" onClick={() => onChoose("skip")}>Não comprar fragmento</button>
+    </div>}
+    {game.specialEventId === "mask-tribunal" && <div className="event-choice-list tribunal-choices">
+      {cursed.length === 0 ? <button onClick={() => onChoose("ward")}><span>◫</span><div><strong>Receber o Selo de Sal</strong><small>Anula a próxima maldição adquirida.</small></div><b>Grátis</b></button> : cursed.flatMap((relic, index) => [
+        <button disabled={player.gold < 3} key={"purify-" + relic.id + "-" + index} onClick={() => onChoose("purify:" + relic.id)}><span>✣</span><div><strong>Purificar {relic.name}</strong><small>Anula a maldição permanentemente.</small></div><b>3 ●</b></button>,
+        <button key={"seal-" + relic.id + "-" + index} onClick={() => onChoose("seal:" + relic.id)}><span>⚿</span><div><strong>Selar {relic.name}</strong><small>Anula a maldição, mas a peça perde 1 Prestígio.</small></div><b>−1 ✦</b></button>,
+        <button key={"condemn-" + relic.id + "-" + index} onClick={() => onChoose("condemn:" + relic.id)}><span>†</span><div><strong>Condenar {relic.name}</strong><small>Destrói a peça e devolve 2 moedas.</small></div><b>+2 ●</b></button>,
+      ])}
+      <button className="event-skip" onClick={() => onChoose("skip")}>Recusar o julgamento</button>
+    </div>}
+    {game.specialEventId === "stolen-mask-market" && <div className="mask-market">
+      <div className="mask-market-rules" aria-label="Como vencer uma máscara">
+        <article><b>1</b><div><strong>Escolha uma máscara</strong><small>Você participa somente da disputa por ela.</small></div></article>
+        <article><b>2</b><div><strong>Aposte de 1 a 5 Selos</strong><small>O lance é secreto até todos confirmarem.</small></div></article>
+        <article><b>3</b><div><strong>Tenha o maior lance</strong><small>Quem apostar mais naquela máscara fica com seu poder.</small></div></article>
+      </div>
+      <div className="mask-options">{STOLEN_MASKS.map((mask) => <button className={maskId === mask.id ? "selected" : ""} key={mask.id} onClick={() => setMaskId(mask.id)}><span>{mask.icon}</span><strong>{mask.name}</strong><small>{mask.description}</small><b>{maskId === mask.id ? "SUA DISPUTA" : "ESCOLHER"}</b></button>)}</div>
+      <section className="seal-bid">
+        <header><span>Seu lance secreto</span><strong>{sealBid} de 5 Selos</strong></header>
+        <div className="seal-pips" role="group" aria-label="Quantidade de Selos apostados">{[1, 2, 3, 4, 5].map((amount) => <button type="button" className={amount <= sealBid ? "active" : ""} aria-label={"Apostar " + amount + (amount === 1 ? " Selo" : " Selos")} aria-pressed={sealBid === amount} key={amount} onClick={() => setSealBid(amount)}><span>◆</span><small>{amount}</small></button>)}</div>
+        <p>Você está disputando <strong>{selectedMask.name}</strong>. O maior lance entre quem escolheu esta mesma máscara vence.</p>
+        <small>Em empate, vence quem tiver menos Prestígio. Os Selos só existem neste evento, não gastam moedas e desaparecem depois.</small>
+      </section>
+      <button className="primary-button full mask-market-confirm" onClick={() => onChoose(maskId + ":" + sealBid)}>Confirmar lance · {sealBid} {sealBid === 1 ? "Selo" : "Selos"} por {selectedMask.name}</button>
+    </div>}
+  </div>;
 }
 
 function SpecialEventResult({ game, canConfirm, onConfirm }: { game: GameState; canConfirm: boolean; onConfirm: () => void; }) {
