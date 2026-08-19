@@ -46,6 +46,9 @@ test("cada partida recebe uma rotação aleatória diferente com doze lotes", ()
     assert.equal(deck.length, 12);
     assert.equal(new Set(deck.map((item) => item.id)).size, 12);
     assert.ok(deck.every((item) => RELICS.some((relic) => relic.id === item.id)));
+    const deckIds = new Set(deck.map((item) => item.id));
+    const possibleDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => deckIds.has(id)));
+    assert.ok(possibleDuos.length >= 2, "cada rotação deve conter pelo menos duas infusões duplas possíveis");
     if (previousDeck.length > 0) {
       assert.notEqual(
         deck.map((item) => item.id).sort().join("|"),

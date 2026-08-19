@@ -291,9 +291,11 @@ function rotationSignature(relics: readonly Pick<Relic, "id">[]): string {
 
 function createDeckDraft(): { deck: Relic[]; protectedIds: Set<string> } {
   const regularIds = new Set(RELICS.map((relic) => relic.id));
-  const regularTriples = FUSION_RECIPES.filter((recipe) => recipe.tier === 3 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
   const regularDuos = FUSION_RECIPES.filter((recipe) => recipe.tier === 2 && !recipe.result.legendary && recipe.components.every((id) => regularIds.has(id)));
-  const recipes = [...shuffle(regularTriples).slice(0, 1), ...shuffle(regularDuos).slice(0, 2)];
+  const firstRecipe = shuffle(regularDuos)[0];
+  const disjointRecipes = firstRecipe ? regularDuos.filter((recipe) => recipe.components.every((id) => !firstRecipe.components.includes(id))) : [];
+  const secondRecipe = shuffle(disjointRecipes)[0] ?? shuffle(regularDuos.filter((recipe) => recipe.id !== firstRecipe?.id))[0];
+  const recipes = [firstRecipe, secondRecipe].filter((recipe): recipe is FusionRecipe => Boolean(recipe));
   const protectedIds = new Set(recipes.flatMap((recipe) => recipe.components));
   const guaranteed = RELICS.filter((relic) => protectedIds.has(relic.id));
   const fillers = shuffle(RELICS.filter((relic) => !protectedIds.has(relic.id))).slice(0, 12 - guaranteed.length);
@@ -526,6 +528,47 @@ function fusionConsumption(player: Player, recipe: FusionRecipe): string[] | nul
 
 function availableFusionRecipes(player: Player): FusionRecipe[] {
   return FUSION_RECIPES.filter((recipe) => fusionConsumption(player, recipe));
+}
+
+type InfusionNotebookEntry = {
+  recipeId: string;
+  resultName: string;
+  resultIcon: string;
+  ownedNames: string[];
+  missingNames: string[];
+  progress: number;
+  total: number;
+  ready: boolean;
+};
+
+function infusionCatalogueItem(id: string): Relic | undefined {
+  return [...RELICS, ...LEGENDARY_RELICS, ...FUSION_RECIPES.map((recipe) => recipe.result)].find((item) => item.id === id);
+}
+
+export function infusionRecipesForRelic(relicId: string): FusionRecipe[] {
+  return FUSION_RECIPES.filter((recipe) => recipe.components.includes(relicId) || recipe.upgradeFrom === relicId || recipe.upgradeWith === relicId);
+}
+
+export function infusionNotebook(player: Player): InfusionNotebookEntry[] {
+  const inventoryIds = new Set(player.inventory.map((item) => item.id));
+  return FUSION_RECIPES.map((recipe) => {
+    const directRoute = recipe.components;
+    const upgradeRoute = recipe.upgradeFrom && recipe.upgradeWith ? [recipe.upgradeFrom, recipe.upgradeWith] : null;
+    const routeScore = (route: string[]) => route.filter((id) => inventoryIds.has(id)).length / route.length;
+    const route = upgradeRoute && routeScore(upgradeRoute) > routeScore(directRoute) ? upgradeRoute : directRoute;
+    const ownedIds = route.filter((id) => inventoryIds.has(id));
+    const missingIds = route.filter((id) => !inventoryIds.has(id));
+    return {
+      recipeId: recipe.id,
+      resultName: recipe.result.name,
+      resultIcon: recipe.result.icon,
+      ownedNames: ownedIds.map((id) => infusionCatalogueItem(id)?.name ?? id),
+      missingNames: missingIds.map((id) => infusionCatalogueItem(id)?.name ?? id),
+      progress: ownedIds.length,
+      total: route.length,
+      ready: missingIds.length === 0,
+    };
+  }).filter((entry) => entry.progress > 0).sort((a, b) => Number(b.ready) - Number(a.ready) || (b.progress / b.total) - (a.progress / a.total) || a.total - b.total || a.resultName.localeCompare(b.resultName, "pt-BR"));
 }
 
 function performFusion(game: GameState, actorId: string, recipeId: string): GameState {
@@ -906,6 +949,8 @@ export default function Home() {
   const [connectionState, setConnectionState] = useState<"connecting" | "online" | "offline">("connecting");
   const [onlineMessage, setOnlineMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [gameLibraryOpen, setGameLibraryOpen] = useState(false);
+  const [gameLibrarySection, setGameLibrarySection] = useState<"relics" | "fusions" | "forbidden">("relics");
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [musicVolume, setMusicVolume] = useState(22);
@@ -1333,11 +1378,11 @@ export default function Home() {
   const canManageMuseum = game.status === "announcement" || game.status === "awarded";
   return (
     <main className="game-screen">
-      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % 3) + 1} de 3</span></div><div className="header-progress">{[1,2,3,4].map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button>{isRoomHost && <button className="cancel-match-button" onClick={() => setCancelConfirmOpen(true)}>Cancelar partida</button>}</div></header>
+      <header className="game-header"><div><span className="mini-brand">Leilão da Meia-Noite</span><span className="act-label">Sala {onlineRoom?.code} · Ato {game.act} · Lote {(game.lotIndex % 3) + 1} de 3</span></div><div className="header-progress">{[1,2,3,4].map((act) => <span className={act <= game.act ? "filled" : ""} key={act} />)}</div><div className="header-actions"><span className={`live-dot ${connectionState}`}>{connectionState === "online" ? "Ao vivo" : "Reconectando"}</span><div className={`soundtrack-control ${soundOn ? "playing" : "muted"}`}><button className="soundtrack-button" onClick={toggleSound} aria-label={soundOn ? "Mutar trilha sonora" : "Desmutar trilha sonora"} title={soundOn ? "Mutar Apparitions Ball" : "Desmutar trilha sonora"}><span>{soundOn ? "♪" : "×"}</span><small>{soundOn ? "Trilha" : "Mudo"}</small></button><label className="volume-slider"><input type="range" min="0" max="100" step="1" value={soundOn ? musicVolume : 0} onChange={(event) => changeMusicVolume(Number(event.target.value))} aria-label="Volume da trilha sonora" /><output>{soundOn ? musicVolume : 0}%</output></label></div><button className="text-button" onClick={() => { setGameLibrarySection("relics"); setGameLibraryOpen(true); }}>Biblioteca</button><button className="text-button" onClick={() => setRulesOpen(true)}>Regras</button>{isRoomHost && <button className="cancel-match-button" onClick={() => setCancelConfirmOpen(true)}>Cancelar partida</button>}</div></header>
       <section className="players-rail">{game.players.map((player) => <PlayerSeat key={player.id} player={player} isTurn={auction?.turnId === player.id} isLeader={auction?.highBidder === player.id} onClick={() => !player.isHuman && setRivalId(player.id)} />)}</section>
 
       <section className="auction-table redesigned">
-        <MuseumPanel player={human!} status={game.status} fusionCount={fusionRecipes.length} enabled={canManageMuseum} onInspect={(relic) => setDetailRelicId(relic.id)} onOpenFusion={() => setFusionOpen(true)} />
+        <MuseumPanel player={human!} status={game.status} fusionCount={fusionRecipes.length} enabled={canManageMuseum} onInspect={(relic) => setDetailRelicId(relic.id)} onOpenFusion={() => setFusionOpen(true)} onOpenLibrary={() => { setGameLibrarySection("fusions"); setGameLibraryOpen(true); }} />
 
         <section className="relic-stage new-stage" aria-live="polite">
           {game.status === "intrigue" && <IntrigueSelection player={human!} players={game.players} onChoose={chooseIntrigue} />}
@@ -1352,6 +1397,7 @@ export default function Home() {
       </section>
 
       {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
+      {gameLibraryOpen && <InGameLibraryModal initialSection={gameLibrarySection} onClose={() => setGameLibraryOpen(false)} />}
       {cancelConfirmOpen && <CancelGameModal onClose={() => setCancelConfirmOpen(false)} onConfirm={cancelMatch} />}
       {detailRelic && <RelicDetailModal relic={detailRelic} player={human!} status={game.status} enabled={canManageMuseum} onClose={() => setDetailRelicId(null)} onUse={() => { setDetailRelicId(null); if (detailRelic.power.target) setActionRelicId(detailRelic.id); else { commitGame((current) => executeRelicAction(current, human!.id, detailRelic.id)); playTone("win"); } }} />}
       {actionRelic && <ActionTargetModal relic={actionRelic} actor={human!} game={game} onClose={() => setActionRelicId(null)} onTarget={(targetId) => { commitGame((current) => executeRelicAction(current, human!.id, actionRelic.id, targetId)); setActionRelicId(null); playTone("win"); }} />}
@@ -1409,6 +1455,21 @@ function LibraryScreen({ onBack }: { onBack: () => void; }) {
   return <main className="library-screen"><SimpleHeader onBack={onBack} right={<span className="library-total">{RELICS.length + LEGENDARY_RELICS.length} peças · {FUSION_RECIPES.length} receitas · {INTRIGUES.length} intrigas</span>} /><section className="library-shell"><header className="library-heading"><div><p className="eyebrow">Acervo da corte</p><h1>Biblioteca da Meia-Noite</h1><p>Consulte todas as peças antes de entrar numa sala. Descubra poderes, maldições, receitas de infusão, Itens Proibidos e as possíveis Intrigas Secretas.</p></div><div className="library-seal"><span>▤</span><small>Catálogo<br />completo</small></div></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Itens Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button><button className={section === "intrigues" ? "active" : ""} onClick={() => setSection("intrigues")}><strong>Intrigas</strong><span>{INTRIGUES.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, poder ou objetivo…" /></label></div><div className="library-results-note"><span>{resultCount} registro{resultCount === 1 ? " encontrado" : "s encontrados"}</span><small>{section === "relics" ? "12 destas peças são sorteadas em uma nova rotação a cada partida" : section === "fusions" ? "Combinações irreversíveis realizadas no Museu" : section === "forbidden" ? "Candidatos que a corte escolhe durante a partida" : "Possíveis objetivos; cada jogador recebe três opções aleatórias"}</small></div><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "intrigues" && intrigues.map((intrigue) => <article className="library-card intrigue-library-card" key={intrigue.id}><header><span className="library-icon">{intrigue.icon}</span><div><small>Possível objetivo secreto</small><h2>{intrigue.name}</h2><p>Escolhida antes do primeiro lote</p></div><b>+{intrigue.reward} ✦</b></header><div className="library-power"><small>Condição da intriga</small><p>{intrigue.description}</p></div><footer><span>Revelada no final</span><span>Escolha definitiva</span></footer></article>)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = catalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{resultCount === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome, poder ou categoria.</p></div>}</section></main>;
 }
 
+function InGameLibraryModal({ initialSection, onClose }: { initialSection: "relics" | "fusions" | "forbidden"; onClose: () => void; }) {
+  const [section, setSection] = useState(initialSection);
+  const [search, setSearch] = useState("");
+  const query = search.trim().toLocaleLowerCase("pt-BR");
+  const matchesRelic = (relic: Relic) => !query || [relic.name, relic.epithet, relic.power.name, relic.power.description, relic.lore, ...relic.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query);
+  const regular = RELICS.filter(matchesRelic);
+  const forbidden = LEGENDARY_RELICS.filter(matchesRelic);
+  const fusions = FUSION_RECIPES.filter((recipe) => {
+    const componentNames = recipe.components.map((id) => infusionCatalogueItem(id)?.name ?? id);
+    return !query || [recipe.result.name, recipe.result.power.name, recipe.result.power.description, ...componentNames].join(" ").toLocaleLowerCase("pt-BR").includes(query);
+  });
+  const count = section === "relics" ? regular.length : section === "fusions" ? fusions.length : forbidden.length;
+  return <div className="modal-backdrop game-library-backdrop" role="dialog" aria-modal="true" aria-labelledby="game-library-title"><section className="game-library-modal"><button className="modal-close" onClick={onClose}>×</button><header><div><p className="eyebrow">Consulta durante o baile</p><h2 id="game-library-title">Biblioteca da Meia-Noite</h2><p>A partida continua sincronizada enquanto você consulta o acervo.</p></div><span>▤</span></header><div className="library-toolbar"><nav className="library-tabs"><button className={section === "relics" ? "active" : ""} onClick={() => setSection("relics")}><strong>Relíquias</strong><span>{RELICS.length}</span></button><button className={section === "fusions" ? "active" : ""} onClick={() => setSection("fusions")}><strong>Infusões</strong><span>{FUSION_RECIPES.length}</span></button><button className={section === "forbidden" ? "active" : ""} onClick={() => setSection("forbidden")}><strong>Proibidos</strong><span>{LEGENDARY_RELICS.length}</span></button></nav><label className="library-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar item, poder ou receita…" /></label></div><div className="library-results-note"><span>{count} registro{count === 1 ? " encontrado" : "s encontrados"}</span><small>Feche a biblioteca para voltar ao seu Museu.</small></div><div className="game-library-scroll"><div className={`library-grid section-${section}`}>{section === "relics" && regular.map((relic) => <RelicLibraryCard relic={relic} key={relic.id} />)}{section === "forbidden" && forbidden.map((relic) => <RelicLibraryCard relic={relic} forbidden key={relic.id} />)}{section === "fusions" && fusions.map((recipe) => <article className={`library-card fusion-library-card tier-${recipe.tier}`} key={recipe.id}><header><span className="library-icon">{recipe.result.icon}</span><div><small>Infusão {recipe.tier === 3 ? "tripla" : "dupla"} · custo {recipe.cost} ●</small><h2>{recipe.result.name}</h2><p>{recipe.result.epithet}</p></div><b>✦ {recipe.result.prestige}</b></header><div className="library-components">{recipe.components.map((id, index) => { const component = infusionCatalogueItem(id); return <span key={`${recipe.id}-${id}`}><i>{component?.icon ?? "◇"}</i><strong>{component?.name ?? id}</strong>{index < recipe.components.length - 1 && <b>+</b>}</span>; })}</div><div className="library-power"><small>{recipe.result.power.name} · uma vez por {recipe.result.power.once === "act" ? "ato" : "partida"}</small><p>{recipe.result.power.description}</p></div>{recipe.result.curse && <div className="library-curse">☠ <strong>{recipe.result.curse.name}</strong> · {recipe.result.curse.description}</div>}<footer>{recipe.result.tags.map((tag) => <span key={tag}>{tag}</span>)}</footer></article>)}</div>{count === 0 && <div className="library-empty"><span>◇</span><strong>Nenhum registro encontrado</strong><p>Tente outro nome ou poder.</p></div>}</div></section></div>;
+}
+
 function RelicLibraryCard({ relic, forbidden = false }: { relic: Relic; forbidden?: boolean }) {
   const signatures = loreSignatures(relic);
   return <article className={`library-card relic-library-card ${relic.cursed ? "cursed" : ""} ${forbidden ? "forbidden" : ""} ${relic.id === "fabiana-creator" ? "creator" : ""}`}>
@@ -1451,9 +1512,23 @@ function PlayerSeat({ player, isTurn, isLeader, onClick }: { player: Player; isT
   return <button className={`player-seat ${player.isHuman ? "human" : "rival"} ${isTurn ? "turn" : ""} ${isLeader ? "leader" : ""}`} onClick={onClick}><div className="seat-portrait">{player.character.sigil}{isLeader && <span className="leader-crown">♛</span>}</div><div className="seat-identity"><strong>{player.username}{player.isHuman && <small> você</small>}</strong><span>{player.isHuman ? "Seu Museu" : "Clique para negociar"}</span></div><div className="seat-resources"><span>● {player.gold}</span><span>✦ {visiblePrestige(player)}</span></div><div className="mini-inventory">{player.inventory.length === 0 ? <span>Sem relíquias</span> : player.inventory.slice(-6).map((item, index) => <b title={item.name} key={`${item.id}-${index}`}>{item.icon}</b>)}</div></button>;
 }
 
-function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFusion }: { player: Player; status: GameStatus; fusionCount: number; enabled: boolean; onInspect: (relic: OwnedRelic) => void; onOpenFusion: () => void; }) {
+function MuseumPanel({ player, status, fusionCount, enabled, onInspect, onOpenFusion, onOpenLibrary }: { player: Player; status: GameStatus; fusionCount: number; enabled: boolean; onInspect: (relic: OwnedRelic) => void; onOpenFusion: () => void; onOpenLibrary: () => void; }) {
   const window = artifactWindowState(player, status);
-  return <aside className="museum-panel"><div className={`artifact-window ${window.mode}`} aria-live="polite"><span className="artifact-window-sigil">{window.mode === "open" ? "✦" : "◷"}</span><div><small>Tempo de ativação</small><strong>{window.label}</strong><p>{window.detail}</p></div>{window.mode === "open" && <b>USE AGORA</b>}</div><header><div><p className="panel-kicker">Seu Museu</p><h2>{player.inventory.length} relíquias</h2></div><span className="museum-prestige">✦ {visiblePrestige(player)}</span></header>{fusionCount > 0 && <button className="fusion-alert" disabled={!enabled || player.infusionsAct >= 1} onClick={onOpenFusion}><span>✧</span><div><strong>{fusionCount} infusão{fusionCount === 1 ? " disponível" : "ões disponíveis"}</strong><small>{player.infusionsAct >= 1 ? "Infusão do ato já realizada" : "Combine relíquias do Museu"}</small></div></button>}<div className="museum-grid">{player.inventory.length === 0 ? <div className="empty-museum"><span>◇</span><strong>As vitrines estão vazias</strong><p>Suas relíquias aparecerão aqui.</p></div> : player.inventory.map((relic, index) => { const cursed = relic.cursed && !relic.curseSuppressed; const available = actionAvailable(relic); return <button className={`museum-tile ${relic.art ? "has-art" : ""} ${cursed ? "cursed" : ""} ${relic.fusionTier ? "fused" : ""}`} key={`${relic.id}-${index}`} onClick={() => onInspect(relic)}><RelicArtwork relic={relic} variant="museum" /><span className="tile-copy"><strong>{relic.name}</strong><small>✦ {relic.prestige + (relic.bonusPrestige ?? 0)} · {(relic.exhaustedLots ?? 0) > 0 ? "infusão estabilizando" : available ? "poder pronto" : "poder usado"}</small></span>{relic.fusionTier && <b className="tile-fusion">{relic.fusionTier === 3 ? "III" : "II"}</b>}{cursed && <b className="tile-curse">☠</b>}</button>; })}</div><footer><span>Artefatos ativados neste ato</span><strong>{player.artifactsUsedAct}/{artifactLimit(player)}</strong></footer></aside>;
+  const fullNotebook = infusionNotebook(player);
+  const notebook = fullNotebook.slice(0, 3);
+  const readyNotebookCount = fullNotebook.filter((entry) => entry.ready).length;
+  const [notebookOpen, setNotebookOpen] = useState(readyNotebookCount > 0);
+  useEffect(() => {
+    if (readyNotebookCount > 0) setNotebookOpen(true);
+  }, [readyNotebookCount]);
+  return <aside className="museum-panel">
+    <div className={`artifact-window ${window.mode}`} aria-live="polite"><span className="artifact-window-sigil">{window.mode === "open" ? "✦" : "◷"}</span><div><small>Tempo de ativação</small><strong>{window.label}</strong><p>{window.detail}</p></div>{window.mode === "open" && <b>USE AGORA</b>}</div>
+    <header><div><p className="panel-kicker">Seu Museu</p><h2>{player.inventory.length} relíquias</h2></div><span className="museum-prestige">✦ {visiblePrestige(player)}</span></header>
+    {notebook.length > 0 && <details className="infusion-notebook" open={notebookOpen} onToggle={(event) => setNotebookOpen(event.currentTarget.open)}><summary><span>✧</span><div><strong>Caderno de Infusões</strong><small>Conselhos do Curador do Museu</small></div><b title={readyNotebookCount > 0 ? `${readyNotebookCount} infusão pronta` : `${fullNotebook.length} receitas possíveis`}>{readyNotebookCount || fullNotebook.length}</b></summary><div className="notebook-pages">{notebook.map((entry) => <article className={entry.ready ? "ready" : ""} key={entry.recipeId}><span>{entry.resultIcon}</span><div><strong>{entry.resultName}</strong><p>{entry.ready ? "Patrono, as peças estão prontas. Podemos realizar a infusão." : `Patrono, falta ${entry.missingNames.join(" e ")} para concluir esta obra.`}</p><small>{entry.progress}/{entry.total} peças · {entry.ownedNames.join(" · ")}</small></div></article>)}</div><button type="button" onClick={onOpenLibrary}>Consultar todas as receitas</button></details>}
+    {fusionCount > 0 && <button className="fusion-alert" disabled={!enabled || player.infusionsAct >= 1} onClick={onOpenFusion}><span>✧</span><div><strong>{fusionCount} infusão{fusionCount === 1 ? " disponível" : "ões disponíveis"}</strong><small>{player.infusionsAct >= 1 ? "Infusão do ato já realizada" : "Combine relíquias do Museu"}</small></div></button>}
+    <div className="museum-grid">{player.inventory.length === 0 ? <div className="empty-museum"><span>◇</span><strong>As vitrines estão vazias</strong><p>Suas relíquias aparecerão aqui.</p></div> : player.inventory.map((relic, index) => { const cursed = relic.cursed && !relic.curseSuppressed; const available = actionAvailable(relic); const infusionLinks = infusionRecipesForRelic(relic.id); return <button className={`museum-tile ${relic.art ? "has-art" : ""} ${cursed ? "cursed" : ""} ${relic.fusionTier ? "fused" : ""} ${infusionLinks.length > 0 ? "infusion-ingredient" : ""}`} key={`${relic.id}-${index}`} onClick={() => onInspect(relic)}><RelicArtwork relic={relic} variant="museum" /><span className="tile-copy"><strong>{relic.name}</strong><small>✦ {relic.prestige + (relic.bonusPrestige ?? 0)} · {(relic.exhaustedLots ?? 0) > 0 ? "infusão estabilizando" : available ? "poder pronto" : "poder usado"}</small></span>{infusionLinks.length > 0 && <b className="tile-infusion-hint" title={`${infusionLinks.length} receita${infusionLinks.length === 1 ? " possível" : "s possíveis"}`}>✧</b>}{relic.fusionTier && <b className="tile-fusion">{relic.fusionTier === 3 ? "III" : "II"}</b>}{cursed && <b className="tile-curse">☠</b>}</button>; })}</div>
+    <footer><span>Artefatos ativados neste ato</span><strong>{player.artifactsUsedAct}/{artifactLimit(player)}</strong></footer>
+  </aside>;
 }
 
 function AuctionControls({ game, human, minimumBid, canBid, canControl, turnPlayer, openAuction, bid, pass, next }: { game: GameState; human: Player; minimumBid: number; canBid: boolean; canControl: boolean; turnPlayer?: Player; openAuction: () => void; bid: (amount: number) => void; pass: () => void; next: () => void; }) {

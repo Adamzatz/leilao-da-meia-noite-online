@@ -17,6 +17,8 @@ import {
   distributeIncome,
   executeRelicAction,
   executeTalentAction,
+  infusionNotebook,
+  infusionRecipesForRelic,
   intrigueProgress,
   passTurn,
   proposeTrade,
@@ -306,6 +308,18 @@ test("mostrador do Museu abre, aguarda o martelo e respeita o limite do ato", ()
   });
   assert.equal(artifactWindowState(holder, "bidding").mode, "bidding");
   assert.equal(artifactWindowState({ ...holder, artifactsUsedAct: artifactLimit(holder) }, "announcement").mode, "spent");
+});
+
+test("Caderno de Infusões identifica peças possuídas e componentes ausentes", () => {
+  const crown = structuredClone(RELICS.find((item) => item.id === "fallen-crown")!);
+  const holder = player("buyer", { inventory: [crown] });
+  const buriedMonarch = infusionNotebook(holder).find((entry) => entry.recipeId === "recipe-buried-monarch");
+
+  assert.ok(infusionRecipesForRelic(crown.id).some((recipe) => recipe.id === "recipe-buried-monarch"));
+  assert.equal(buriedMonarch?.progress, 1);
+  assert.equal(buriedMonarch?.total, 2);
+  assert.equal(buriedMonarch?.ready, false);
+  assert.deepEqual(buriedMonarch?.missingNames, ["Armadura Fraturada de Zat"]);
 });
 
 test("catálogo proibido possui oito candidatos únicos e utilizáveis", () => {
