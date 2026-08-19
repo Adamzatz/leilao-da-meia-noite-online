@@ -103,10 +103,12 @@ test("relíquias comuns amaldiçoadas preservam valor mínimo de Prestígio", ()
 });
 
 test("toda arte vinculada aponta para um arquivo público existente", () => {
-  const illustrated = RELICS.filter((relic) => relic.art);
+  const illustrated = [...RELICS, ...LEGENDARY_RELICS].filter((relic) => relic.art);
 
+  assert.equal(illustrated.length, 23);
   assert.ok(illustrated.some((relic) => relic.name === "Coroa Fraturada de Zat"));
   assert.ok(illustrated.some((relic) => relic.name === "Manto de Conquista de Eichiro Oda"));
+  assert.ok(illustrated.some((relic) => relic.name === "FABIANA, A Criadora"));
   for (const relic of illustrated) {
     assert.match(relic.art!, /^\/artifacts\/[a-z0-9-]+\.png$/);
     assert.ok(existsSync(path.join(process.cwd(), "public", relic.art!.slice(1))), `${relic.name} está sem arquivo de arte`);
